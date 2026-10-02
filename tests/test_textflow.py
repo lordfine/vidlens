@@ -1,4 +1,4 @@
-from vidtool.textflow import (fmt_stamp, join_sentences, render_paragraphs,
+from vidlens.textflow import (fmt_stamp, join_sentences, render_paragraphs,
                               to_paragraphs)
 
 

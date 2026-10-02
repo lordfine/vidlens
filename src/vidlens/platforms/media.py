@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 
 from .. import cache as cache_mod
-from ..agentio import BlockedError, VidtoolError
+from ..agentio import BlockedError, vidlensError
 from . import interpret_ytdlp_error, ytdlp_opts
 
 
@@ -65,7 +65,7 @@ def download_media(meta: dict, *, kind: str, cookiefile: str | None,
             raise BlockedError(
                 "下载未产生任何文件",
                 hint="平台可能拦截了媒体下载。带 --cookie 重试,或运行 "
-                     "`vidtool doctor` 检查网络。")
+                     "`vidlens doctor` 检查网络。")
         produced.sort(key=lambda p: p.stat().st_size, reverse=True)
         produced[0].replace(dest)
     return dest

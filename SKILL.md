@@ -1,15 +1,15 @@
 ---
-name: vidtool
+name: vidlens
 description: 解析抖音/B站视频的 CLI 工具包:提取字幕或语音转文字、按多种颗粒度拆帧、生成供综合分析的视频素材包(subtitle/ASR + frames + manifest + context.md)。AI 总结由 agent 自己完成,本工具只准备素材。当用户要求"分析这个视频/总结视频内容/看看视频里说了什么/提取视频字幕/视频转文字"时使用。
 ---
 
-# vidtool — 视频解析工具(agent 能力包)
+# vidlens — 视频解析工具(agent 能力包)
 
 ## 启动检查
 
 ```bash
-cd F:\vidtool
-uv run vidtool doctor
+cd F:\vidlens
+uv run vidlens doctor
 ```
 
 - `status: "ok"` → 直接用
@@ -18,12 +18,12 @@ uv run vidtool doctor
 ## 命令速查(全部输出 JSON)
 
 ```bash
-uv run vidtool meta URL                        # 元信息+字幕轨,不下载。总是先跑这个
-uv run vidtool subs URL [--lang zh] [--format srt|txt|json] [--no-asr]
-uv run vidtool transcribe URL [--model sensevoice] [--lang auto]
-uv run vidtool frames URL --mode count|fps|scene|keyframe [--count N] [--fps F] [--contact-sheet]
-uv run vidtool prepare URL [--granularity coarse|medium|fine]   # 一站式素材包
-uv run vidtool cache list|clean [--all]
+uv run vidlens meta URL                        # 元信息+字幕轨,不下载。总是先跑这个
+uv run vidlens subs URL [--lang zh] [--format srt|txt|json] [--no-asr]
+uv run vidlens transcribe URL [--model sensevoice] [--lang auto]
+uv run vidlens frames URL --mode count|fps|scene|keyframe [--count N] [--fps F] [--contact-sheet]
+uv run vidlens prepare URL [--granularity coarse|medium|fine]   # 一站式素材包
+uv run vidlens cache list|clean [--all]
 ```
 
 URL 支持:完整链接、`b23.tv`/`v.douyin.com` 分享短链、含链接的分享文案。
@@ -63,5 +63,5 @@ URL 支持:完整链接、`b23.tv`/`v.douyin.com` 分享短链、含链接的分
 ## 注意
 
 - 长视频(>30min)的 prepare(fine) 会产生大量帧与较慢的转写;先用 coarse 确认方向
-- 缓存位于 `%LOCALAPPDATA%\vidtool`,LRU 上限 2GB;`cache clean --all` 清空
-- ffmpeg 无需安装(包内自带静态版);`VIDTOOL_FFMPEG` 可覆盖
+- 缓存位于 `%LOCALAPPDATA%\vidlens`,LRU 上限 2GB;`cache clean --all` 清空
+- ffmpeg 无需安装(包内自带静态版);`vidlens_FFMPEG` 可覆盖

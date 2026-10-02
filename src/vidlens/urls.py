@@ -118,8 +118,8 @@ def _short_fail(target: Target):
 def classify(url_or_text: str, *, expand: bool = True) -> Target:
     url = normalize_input(url_or_text)
     if not re.match(r"^https?://", url):
-        from .agentio import VidtoolError
-        raise VidtoolError(
+        from .agentio import vidlensError
+        raise vidlensError(
             f"输入不是有效的视频链接: {url!r}",
             hint="提供抖音或B站的视频页/分享短链,例如 https://v.douyin.com/xxxx 或 "
                  "https://www.bilibili.com/video/BVxxxx。",

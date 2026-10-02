@@ -1,6 +1,6 @@
 """ffmpeg resolution and small wrappers.
 
-Order: $VIDTOOL_FFMPEG (exe or dir) -> system PATH -> static binary bundled
+Order: $vidlens_FFMPEG (exe or dir) -> system PATH -> static binary bundled
 with the `imageio-ffmpeg` wheel. No ffprobe dependency: durations come from
 yt-dlp metadata or by parsing `ffmpeg -i` stderr.
 """
@@ -18,7 +18,7 @@ from .agentio import DependencyError
 
 @lru_cache(maxsize=1)
 def ffmpeg_path() -> str:
-    env = os.environ.get("VIDTOOL_FFMPEG")
+    env = os.environ.get("vidlens_FFMPEG")
     if env:
         p = env if env.endswith(".exe") else os.path.join(env, "ffmpeg.exe")
         if os.path.isfile(p):
@@ -35,8 +35,8 @@ def ffmpeg_path() -> str:
     except Exception as e:  # not installed / wheel without binary
         raise DependencyError(
             f"找不到可用的 ffmpeg ({e})",
-            hint="运行 `vidtool doctor` 查看详情;或 `uv sync` 安装依赖,"
-                 "或设置 VIDTOOL_FFMPEG 指向本机 ffmpeg 可执行文件/目录。") from e
+            hint="运行 `vidlens doctor` 查看详情;或 `uv sync` 安装依赖,"
+                 "或设置 vidlens_FFMPEG 指向本机 ffmpeg 可执行文件/目录。") from e
 
 
 def _run(args: list[str], *, timeout: float = 1200.0) -> subprocess.CompletedProcess:
@@ -67,9 +67,9 @@ def make_wav(media_path: str, wav_path: str) -> str:
     r = _run(["-y", "-i", media_path, "-vn", "-ac", "1", "-ar", "16000",
               "-c:a", "pcm_s16le", wav_path])
     if r.returncode != 0 or not os.path.isfile(wav_path):
-        from .agentio import VidtoolError
-        raise VidtoolError(
+        from .agentio import vidlensError
+        raise vidlensError(
             "音频抽取失败 (ffmpeg)",
             hint=f"ffmpeg stderr 尾部: {r.stderr[-400:]};文件可能无音轨或已损坏,"
-                 "可先运行 `vidtool doctor`。", errcode="ffmpeg_failed")
+                 "可先运行 `vidlens doctor`。", errcode="ffmpeg_failed")
     return wav_path

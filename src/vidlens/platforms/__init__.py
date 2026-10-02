@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..agentio import AuthNeededError, BlockedError, VidtoolError
+from ..agentio import AuthNeededError, BlockedError, vidlensError
 from .. import cache as cache_mod
 
 
@@ -29,7 +29,7 @@ def cookie_from_args(platform: str, cookie: str | None,
     if cookie_file:
         p = Path(cookie_file)
         if not p.is_file():
-            raise VidtoolError(f"cookie 文件不存在: {cookie_file}",
+            raise vidlensError(f"cookie 文件不存在: {cookie_file}",
                                hint="检查 --cookie-file 路径,或改用 --cookie 直接传 "
                                     "SESSDATA=xxx / 抖音 cookie 字符串。",
                                errcode="bad_cookie")
@@ -58,7 +58,7 @@ def ytdlp_opts(*, cookiefile: str | None, ffmpeg: str | None = None) -> dict:
     return opts
 
 
-def interpret_ytdlp_error(platform: str, e: Exception) -> VidtoolError:
+def interpret_ytdlp_error(platform: str, e: Exception) -> vidlensError:
     """Map yt-dlp DownloadError to agent-friendly codes/hints."""
     msg = str(getattr(e, "msg", e))
     low = msg.lower()
@@ -75,14 +75,14 @@ def interpret_ytdlp_error(platform: str, e: Exception) -> VidtoolError:
             f"被平台拦截或网络不可达: {msg[:200]}",
             hint="稍后重试;或用 --cookie 带登录态;抖音风控常见,换个链接或稍后再试。")
     if "private" in low or "removed" in low or "404" in low or "not found" in low:
-        return VidtoolError(
+        return vidlensError(
             f"内容不存在或不可访问: {msg[:200]}",
             hint="确认链接是否有效、视频是否被删除/设为私密。",
             errcode="content_gone")
     return BlockedError(
         f"yt-dlp 提取失败: {msg[:300]}",
         hint="可重试一次;若持续失败,用 --cookie 提供登录态,或运行 "
-             "`vidtool doctor` 检查网络。")
+             "`vidlens doctor` 检查网络。")
 
 
 def load_meta(platform: str, video_id: str) -> dict | None:

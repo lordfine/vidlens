@@ -1,4 +1,4 @@
-"""vidtool CLI — every command speaks JSON to stdout, errors to stderr."""
+"""vidlens CLI — every command speaks JSON to stdout, errors to stderr."""
 
 from __future__ import annotations
 
@@ -13,12 +13,12 @@ from . import frames as frames_mod
 from . import prepare as prepare_mod
 from . import urls
 from .platforms import media as media_mod
-from .agentio import (DependencyError, NotSupportedError, VidtoolError,
+from .agentio import (DependencyError, NotSupportedError, vidlensError,
                       emit, emit_error)
 from .platforms import cookie_from_args
 
-PLATFORMS = {"bilibili": "vidtool.platforms.bilibili",
-             "douyin": "vidtool.platforms.douyin"}
+PLATFORMS = {"bilibili": "vidlens.platforms.bilibili",
+             "douyin": "vidlens.platforms.douyin"}
 
 
 def _platform_mod(target: urls.Target):
@@ -64,8 +64,8 @@ def cmd_meta(ns) -> int:
         "pages": meta.get("pages") or [],
         "cache_dir": str(cache_mod.video_dir(meta["platform"],
                                               meta["video_id"])),
-        "hint": ("有字幕轨时优先 `vidtool subs`,无则 `vidtool transcribe`;"
-                 "综合分析用 `vidtool prepare`。"),
+        "hint": ("有字幕轨时优先 `vidlens subs`,无则 `vidlens transcribe`;"
+                 "综合分析用 `vidlens prepare`。"),
     }, pretty=ns.pretty)
     return 0
 
@@ -81,7 +81,7 @@ def cmd_subs(ns) -> int:
         try:
             track, segs = mod.fetch_subtitles(target, meta, cookiefile,
                                               lang=ns.lang)
-        except VidtoolError as e:
+        except vidlensError as e:
             if e.errcode in ("auth_needed", "blocked"):
                 raise
             track, segs = None, []
@@ -90,10 +90,10 @@ def cmd_subs(ns) -> int:
     asr = None
     if not segs:
         if ns.no_asr:
-            raise VidtoolError(
+            raise vidlensError(
                 "该视频没有可用字幕(CC)且 --no-asr 已指定",
                 hint="去掉 --no-asr 自动语音转文字,或运行 "
-                     "`vidtool transcribe`。", errcode="no_subtitles")
+                     "`vidlens transcribe`。", errcode="no_subtitles")
         audio = mod.download(target, meta, cookiefile, "audio", 1080, ns.fresh)
         from .asr import get_transcript_cached
         from .lexicon import parse_glossary_arg
@@ -229,7 +229,7 @@ def cmd_doctor(ns) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="vidtool",
+        prog="vidlens",
         description="面向 agent 的视频解析工具(抖音/B站):字幕、语音转文字、"
                     "拆帧、综合素材包。所有输出为 JSON。")
     p.add_argument("--version", action="version", version=__version__)
@@ -332,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
     ns = build_parser().parse_args(argv)
     try:
         return ns.fn(ns)
-    except VidtoolError as e:
+    except vidlensError as e:
         return emit_error(e, pretty=ns.pretty)
     except KeyboardInterrupt:
         sys.stderr.write('{"ok": false, "error": {"code": "interrupted", '
@@ -340,8 +340,8 @@ def main(argv: list[str] | None = None) -> int:
         return 130
     except Exception as e:  # never break the JSON contract
         return emit_error(
-            VidtoolError(f"内部错误: {type(e).__name__}: {e}",
-                         hint="这是 bug,可带完整命令重试;运行 `vidtool doctor` "
+            vidlensError(f"内部错误: {type(e).__name__}: {e}",
+                         hint="这是 bug,可带完整命令重试;运行 `vidlens doctor` "
                               "排查环境;持续失败请反馈。",
                          errcode="internal_error"),
             pretty=ns.pretty)

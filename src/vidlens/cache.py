@@ -1,6 +1,6 @@
 """Cache management.
 
-Layout (base = $VIDTOOL_CACHE or %LOCALAPPDATA%/vidtool):
+Layout (base = $vidlens_CACHE or %LOCALAPPDATA%/vidlens):
   cache/<platform>/<video_id>/meta.json        — normalized metadata
   cache/<platform>/<video_id>/media/*          — downloaded video/audio
   cache/<platform>/<video_id>/jobs/<stamp>-*/  — per-command outputs (subs, frames…)
@@ -21,12 +21,12 @@ DEFAULT_MAX_BYTES = 2 * 1024 * 1024 * 1024  # 2 GiB
 
 
 def base_dir() -> Path:
-    env = os.environ.get("VIDTOOL_CACHE")
+    env = os.environ.get("vidlens_CACHE")
     if env:
         return Path(env)
     local = os.environ.get("LOCALAPPDATA")
     root = Path(local) if local else Path.home() / ".local" / "share"
-    return root / "vidtool"
+    return root / "vidlens"
 
 
 def cache_root() -> Path:

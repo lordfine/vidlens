@@ -1,4 +1,4 @@
-"""`vidtool prepare` — one-stop context bundle: meta + subs/ASR + frames.
+"""`vidlens prepare` — one-stop context bundle: meta + subs/ASR + frames.
 
 The tool never summarizes. It prepares artifacts + manifest.json + context.md;
 the calling agent (harness) does the AI part with its multimodal models.
@@ -13,7 +13,7 @@ from pathlib import Path
 from . import cache as cache_mod
 from . import frames as frames_mod
 from .platforms import media as media_mod
-from .agentio import VidtoolError
+from .agentio import vidlensError
 from .asr import get_transcript_cached
 
 GRANULARITY = {
@@ -57,7 +57,7 @@ def build(target, mod, meta, *, granularity: str = "medium",
     (jdir / "frames").mkdir(exist_ok=True)
 
     manifest = {
-        "tool": "vidtool",
+        "tool": "vidlens",
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "granularity": granularity,
         "video": {k: meta.get(k) for k in (
@@ -78,7 +78,7 @@ def build(target, mod, meta, *, granularity: str = "medium",
     if hasattr(mod, "fetch_subtitles"):
         try:
             track, segs = mod.fetch_subtitles(target, meta, cookiefile)
-        except VidtoolError:
+        except vidlensError:
             track, segs = None, []
     if segs:
         sub_source = "cc"
@@ -121,7 +121,7 @@ def build(target, mod, meta, *, granularity: str = "medium",
             scene_recs = frames_mod.extract(
                 video, jdir / "frames_scene", mode="scene", size=fparams.get("size"),
                 duration=meta.get("duration"))
-        except VidtoolError:
+        except vidlensError:
             scene_recs = []
     manifest["frames"] = {"params": fparams, "files": recs,
                           "scene_files": scene_recs}

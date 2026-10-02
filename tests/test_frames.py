@@ -1,4 +1,4 @@
-from vidtool import frames
+from vidlens import frames
 
 
 def test_scale_filter_none():
@@ -24,6 +24,6 @@ def test_idx_from_name():
 
 def test_extract_unknown_mode(tmp_path):
     import pytest
-    from vidtool.agentio import VidtoolError
-    with pytest.raises(VidtoolError):
+    from vidlens.agentio import vidlensError
+    with pytest.raises(vidlensError):
         frames.extract("x.mp4", tmp_path, mode="nope")

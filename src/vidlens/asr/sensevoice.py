@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from .. import cache as cache_mod
-from ..agentio import BlockedError, DependencyError, VidtoolError
+from ..agentio import BlockedError, DependencyError, vidlensError
 from . import prepare_wav, split_wav
 
 MODEL_DIRNAME = "sensevoice"
@@ -257,7 +257,7 @@ def transcribe(media_path: str, *, lang: str = "auto",
     from ..lexicon import normalize_segments
     segments = normalize_segments(segments, glossary)
     if not segments:
-        raise VidtoolError(
+        raise vidlensError(
             "ASR 未识别出任何语音",
             hint="视频可能没有语音(纯音乐/静音);或语言设置不对,试 --lang auto。",
             errcode="no_speech")

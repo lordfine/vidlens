@@ -5,7 +5,7 @@ from __future__ import annotations
 import yt_dlp
 
 from .. import ffutil
-from ..agentio import NotSupportedError, VidtoolError
+from ..agentio import NotSupportedError, vidlensError
 from ..urls import Target
 from . import interpret_ytdlp_error, load_meta, save_meta, ytdlp_opts
 from . import media as media_mod

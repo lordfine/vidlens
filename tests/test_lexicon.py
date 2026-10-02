@@ -1,4 +1,4 @@
-from vidtool.lexicon import (DEFAULT_GLOSSARY, glossary_hash,
+from vidlens.lexicon import (DEFAULT_GLOSSARY, glossary_hash,
                              normalize_segments, normalize_text,
                              parse_glossary_arg)
 

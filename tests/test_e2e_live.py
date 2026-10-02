@@ -1,4 +1,4 @@
-"""Network E2E — opt-in only: set VIDTOOL_E2E=1 to run.
+"""Network E2E — opt-in only: set vidlens_E2E=1 to run.
 
 Uses live bilibili/douyin links. Anonymous douyin relies on the auto ttwid.
 """
@@ -10,14 +10,14 @@ import sys
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("VIDTOOL_E2E") != "1", reason="set VIDTOOL_E2E=1 to run")
+    os.environ.get("vidlens_E2E") != "1", reason="set vidlens_E2E=1 to run")
 
 BILI = "https://www.bilibili.com/video/BV1NNh86gEMM"      # 2.8min, no CC
 DOUYIN = "https://www.douyin.com/video/7607060532303169189"  # 3.8min dance
 
 
 def run(*args):
-    r = subprocess.run([sys.executable, "-m", "vidtool.cli", *args],
+    r = subprocess.run([sys.executable, "-m", "vidlens.cli", *args],
                        capture_output=True, text=True, encoding="utf-8",
                        timeout=900)
     return r

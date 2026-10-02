@@ -1,4 +1,4 @@
-from vidtool.platforms import media
+from vidlens.platforms import media
 
 
 SEGS = [

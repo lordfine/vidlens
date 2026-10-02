@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 
 from . import ffutil
-from .agentio import VidtoolError
+from .agentio import vidlensError
 
 MAX_FRAMES = 60
 
@@ -71,13 +71,13 @@ def extract(media: str, out_dir: Path, *, mode: str, fps: float = 1.0,
                 return recs
             for old in out_dir.glob(f"frame_*.{fmt}"):
                 old.unlink(missing_ok=True)
-        raise VidtoolError(
+        raise vidlensError(
             f"scene 模式没有检出镜头切换 (试过阈值 {tried})",
             hint="该视频可能没有明显镜头切换;改用 --mode count 或 --mode fps。",
             errcode="no_frames")
     if mode == "keyframe":
         return _extract_stream(media, out_dir, mode, size=size, fmt=fmt)
-    raise VidtoolError(f"未知拆帧模式: {mode}",
+    raise vidlensError(f"未知拆帧模式: {mode}",
                        hint="可选: count | fps | scene | keyframe。",
                        errcode="bad_args")
 
@@ -97,9 +97,9 @@ def _extract_count(media: str, out_dir: Path, count: int, size: int | None,
     count = max(1, min(int(count), MAX_FRAMES))
     dur = duration or ffutil.probe_duration(media)
     if not dur:
-        raise VidtoolError(
+        raise vidlensError(
             "无法确定视频时长(count 模式需要)",
-            hint="元数据缺失且 ffmpeg 探测失败;先运行 `vidtool meta <url>` 刷新缓存。",
+            hint="元数据缺失且 ffmpeg 探测失败;先运行 `vidlens meta <url>` 刷新缓存。",
             errcode="no_duration")
     # midpoint sampling: avoids intro/outro black frames
     stamps = [dur * (i + 0.5) / count for i in range(count)]
@@ -115,9 +115,9 @@ def _extract_count(media: str, out_dir: Path, count: int, size: int | None,
         if r.returncode == 0 and out.is_file() and out.stat().st_size > 0:
             recs.append(_frame_record(out, t, i))
     if not recs:
-        raise VidtoolError(
+        raise vidlensError(
             "拆帧失败: 一帧也没有抽出",
-            hint=f"ffmpeg 最后输出: {_last_err()};运行 `vidtool doctor` 检查。",
+            hint=f"ffmpeg 最后输出: {_last_err()};运行 `vidlens doctor` 检查。",
             errcode="ffmpeg_failed")
     return recs
 
@@ -158,7 +158,7 @@ def _extract_stream(media: str, out_dir: Path, mode: str, *,
     # everything — that means "0 frames", not a real failure
     empty_output = "Nothing was written into output file" in r.stderr
     if r.returncode != 0 and not empty_output:
-        raise VidtoolError(
+        raise vidlensError(
             f"拆帧失败 (ffmpeg, mode={mode})",
             hint=f"ffmpeg stderr 尾部: {_last_err()}", errcode="ffmpeg_failed")
 
@@ -174,7 +174,7 @@ def _extract_stream(media: str, out_dir: Path, mode: str, *,
         # caller (extract) retries with lower thresholds
         if mode == "scene":
             return []
-        raise VidtoolError("拆帧失败: 一帧也没有抽出",
+        raise vidlensError("拆帧失败: 一帧也没有抽出",
                            hint=f"ffmpeg stderr 尾部: {_last_err()}",
                            errcode="ffmpeg_failed")
     return recs[:MAX_FRAMES]
@@ -193,7 +193,7 @@ def contact_sheet(records: list[dict], out_path: Path, *,
     from PIL import Image, ImageDraw
 
     if not records:
-        raise VidtoolError("没有帧可用于拼图", hint="先成功拆帧再生成 contact sheet。",
+        raise vidlensError("没有帧可用于拼图", hint="先成功拆帧再生成 contact sheet。",
                            errcode="no_frames")
     n = len(records)
     cols = cols or max(1, int(n ** 0.5 + 0.999))

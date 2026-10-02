@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from vidtool import cache
+from vidlens import cache
 
 
 def test_dirs_under_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("VIDTOOL_CACHE", str(tmp_path))
+    monkeypatch.setenv("vidlens_CACHE", str(tmp_path))
     vd = cache.video_dir("douyin", "7607060532303169189")
     assert vd == tmp_path / "cache" / "douyin" / "7607060532303169189"
     assert vd.is_dir()
@@ -13,14 +13,14 @@ def test_dirs_under_env(tmp_path, monkeypatch):
 
 
 def test_video_id_sanitized(tmp_path, monkeypatch):
-    monkeypatch.setenv("VIDTOOL_CACHE", str(tmp_path))
+    monkeypatch.setenv("vidlens_CACHE", str(tmp_path))
     vd = cache.video_dir("bilibili", "BV1../evil?*")
     assert vd.name == "BV1..evil" or all(
         c.isalnum() or c in "-_" for c in vd.name)
 
 
 def test_clean_all(tmp_path, monkeypatch):
-    monkeypatch.setenv("VIDTOOL_CACHE", str(tmp_path))
+    monkeypatch.setenv("vidlens_CACHE", str(tmp_path))
     vd = cache.video_dir("douyin", "123")
     (vd / "media").mkdir(parents=True)
     (vd / "media" / "video.mp4").write_bytes(b"x" * 10000)
@@ -30,7 +30,7 @@ def test_clean_all(tmp_path, monkeypatch):
 
 
 def test_clean_lru_noop_when_under_limit(tmp_path, monkeypatch):
-    monkeypatch.setenv("VIDTOOL_CACHE", str(tmp_path))
+    monkeypatch.setenv("vidlens_CACHE", str(tmp_path))
     vd = cache.video_dir("douyin", "123")
     (vd / "media").mkdir(parents=True)
     (vd / "media" / "v.bin").write_bytes(b"x" * 100)

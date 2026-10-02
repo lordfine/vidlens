@@ -16,7 +16,7 @@ import yt_dlp
 
 from .. import cache as cache_mod
 from .. import ffutil
-from ..agentio import (BlockedError, NotSupportedError, VidtoolError)
+from ..agentio import (BlockedError, NotSupportedError, vidlensError)
 from ..urls import Target
 from . import interpret_ytdlp_error, load_meta, save_meta, ytdlp_opts
 from . import media as media_mod

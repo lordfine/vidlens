@@ -1,8 +1,8 @@
 import json
 
-from vidtool import agentio
-from vidtool.agentio import (AuthNeededError, BlockedError, DependencyError,
-                             VidtoolError, emit, emit_error)
+from vidlens import agentio
+from vidlens.agentio import (AuthNeededError, BlockedError, DependencyError,
+                             vidlensError, emit, emit_error)
 
 
 def test_emit_json_stdout(capsys):
@@ -25,12 +25,12 @@ def test_emit_error_stderr_and_code(capsys):
 
 
 def test_exit_codes_distinct():
-    assert VidtoolError("x").exit_code == 1
+    assert vidlensError("x").exit_code == 1
     assert AuthNeededError("x").exit_code == 2
     assert BlockedError("x").exit_code == 3
     assert DependencyError("x").exit_code == 4
 
 
 def test_custom_errcode():
-    e = VidtoolError("x", errcode="no_subtitles", hint="h")
+    e = vidlensError("x", errcode="no_subtitles", hint="h")
     assert e.errcode == "no_subtitles"

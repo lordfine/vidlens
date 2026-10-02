@@ -1,4 +1,4 @@
-"""Self-diagnosis: `vidtool doctor` — JSON status of every dependency."""
+"""Self-diagnosis: `vidlens doctor` — JSON status of every dependency."""
 
 from __future__ import annotations
 

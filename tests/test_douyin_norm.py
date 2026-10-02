@@ -1,4 +1,4 @@
-from vidtool.platforms import douyin
+from vidlens.platforms import douyin
 
 
 FAKE_ITEM = {
@@ -45,14 +45,14 @@ def test_play_urls_nowatermark_first():
 
 
 def test_map_lang():
-    from vidtool.asr.sensevoice import _map_lang
+    from vidlens.asr.sensevoice import _map_lang
     assert _map_lang("zh-CN") == "zh"
     assert _map_lang("AUTO") == "auto"
     assert _map_lang("cantonese") == "yue"
 
 
 def test_cookie_file_written(tmp_path):
-    from vidtool.platforms import write_cookie_file
+    from vidlens.platforms import write_cookie_file
     p = write_cookie_file("bilibili", "SESSDATA=abc123; bili_jct=xyz")
     txt = p.read_text(encoding="utf-8")
     assert ".bilibili.com" in txt and "SESSDATA\tabc123" in txt

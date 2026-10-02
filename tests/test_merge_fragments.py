@@ -1,4 +1,4 @@
-from vidtool.asr.sensevoice import _merge_fragments
+from vidlens.asr.sensevoice import _merge_fragments
 
 
 def test_merges_word_cut_across_segments():
