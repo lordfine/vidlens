@@ -156,19 +156,19 @@ def _fmt_ts(sec: float, comma: bool = True) -> str:
 
 
 def render(segments: list[dict], fmt: str) -> str:
+    from ..textflow import render_paragraphs, to_paragraphs
     if fmt == "json":
         return json.dumps(
-            {"segments": [
-                {"start": round(s["start"], 3), "end": round(s["end"], 3),
-                 "text": s["text"]} for s in segments]},
+            {
+                "segments": [
+                    {"start": round(s["start"], 3), "end": round(s["end"], 3),
+                     "text": s["text"]} for s in segments],
+                "paragraphs": to_paragraphs(segments),
+            },
             ensure_ascii=False, indent=1)
     if fmt == "txt":
-        lines, last = [], ""
-        for s in segments:
-            if s["text"] and s["text"] != last:
-                lines.append(s["text"])
-                last = s["text"]
-        return "\n".join(lines) + "\n"
+        # paragraph style with a [m:ss] anchor per block — the readable view
+        return render_paragraphs(to_paragraphs(segments))
     if fmt == "vtt":
         out = ["WEBVTT", ""]
         for i, s in enumerate(segments, 1):

@@ -34,6 +34,8 @@ DEFAULT_GLOSSARY: dict[str, str] = {
     "api": "API", "mcp": "MCP", "sdk": "SDK", "cli": "CLI", "gui": "GUI",
     "llm": "LLM", "rag": "RAG", "agent": "agent", "token": "token",
     "prompt": "prompt", "skill": "skill", "plugin": "plugin", "hook": "hook",
+    "app": "App", "agent": "agent", "bug": "bug", "ui": "UI",
+    "web": "web", "webui": "WebUI", "fullstack": "fullstack",
     "html": "HTML", "css": "CSS", "json": "JSON", "yaml": "YAML",
     "http": "HTTP", "https": "HTTPS", "url": "URL", "uri": "URI",
     "tcp": "TCP", "dns": "DNS", "cdn": "CDN", "ssh": "SSH", "vps": "VPS",
@@ -55,7 +57,17 @@ _RUN_RE = re.compile(
 
 
 def normalize_text(text: str, extra: dict[str, str] | None = None) -> str:
-    """Replace latin runs whose squashed form is a known term."""
+    """Normalize ASR output.
+
+    1. caller glossary first, as plain substring replace — this is the only
+       way to fix CJK mis-hearings ("携修"->"邪修"), which latin-run matching
+       can never touch
+    2. then latin runs whose squashed form matches a known term
+    """
+    if extra:
+        for k, v in extra.items():
+            if k and v and k != v and k in text:
+                text = text.replace(k, v)
     table = dict(DEFAULT_GLOSSARY)
     if extra:
         table.update({k.lower(): v for k, v in extra.items()})

@@ -18,12 +18,19 @@ def test_normal_words_untouched():
 
 
 def test_extra_glossary_inline():
-    # GBT6 now also hits the built-in gbt6 -> GPT-6 entry
-    out = normalize_text("用GBT6露娜模型", extra={"gbt露娜": "GPT-6 Luna"})
-    assert out == "用GPT-6露娜模型"
-    out2 = normalize_text("用 GBT six lu na 模型",
-                          extra={"gbtsixluna": "GPT-6 Luna"})
-    assert out2 == "用 GPT-6 Luna 模型"
+    # GBT6 also hits the built-in gbt6 -> GPT-6 entry
+    assert normalize_text("用GBT6露娜模型") == "用GPT-6露娜模型"
+    assert normalize_text("用 GBT six lu na 模型",
+                          extra={"gbtsixluna": "GPT-6 Luna"}) == \
+        "用 GPT-6 Luna 模型"
+
+
+def test_extra_glossary_cjk_substring():
+    # CJK mis-hearings are fixed via plain substring replace
+    assert normalize_text("省token的携修技巧", extra={"携修": "邪修"}) == \
+        "省token的邪修技巧"
+    assert normalize_text("用派agent接入模型", extra={"派agent": "pi-agent"}) == \
+        "用pi-agent接入模型"
 
 
 def test_case_only_normalization():

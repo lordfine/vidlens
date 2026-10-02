@@ -24,20 +24,21 @@ def test_render_vtt_header():
     assert "00:00:00.000 --> 00:00:02.500" in text
 
 
-def test_render_txt_dedup():
+def test_render_txt_paragraph_style():
     segs = SEGS + [{"start": 9.0, "end": 10.0, "text": "世界"}]
-    # note: dedup only drops *consecutive* repeats
+    # paragraph view: [m:ss] anchor + joined sentences
     text = media.render(segs, "txt")
-    lines = [l for l in text.splitlines() if l]
-    assert "世界" in lines
+    assert "[   0:00]" in text
+    assert "你好世界hello world" in text.replace("\n", "")
 
 
-def test_render_json():
+def test_render_json_has_paragraphs():
     text = media.render(SEGS, "json")
     import json
     obj = json.loads(text)
     assert len(obj["segments"]) == 3
     assert obj["segments"][0]["text"] == "你好"
+    assert obj["paragraphs"]
 
 
 def test_parse_bili_json():
