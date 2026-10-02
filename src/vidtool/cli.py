@@ -96,9 +96,11 @@ def cmd_subs(ns) -> int:
                      "`vidtool transcribe`。", errcode="no_subtitles")
         audio = mod.download(target, meta, cookiefile, "audio", 1080, ns.fresh)
         from .asr import get_transcript_cached
+        from .lexicon import parse_glossary_arg
         asr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
                                     lang=ns.lang or "auto",
-                                    model=ns.asr_model, fresh=ns.fresh)
+                                    model=ns.asr_model, fresh=ns.fresh,
+                                    glossary=parse_glossary_arg(ns.glossary))
         segs = asr["segments"]
         source = "asr"
 
@@ -127,9 +129,11 @@ def cmd_transcribe(ns) -> int:
     out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "asr")
     audio = mod.download(target, meta, cookiefile, "audio", 1080, ns.fresh)
     from .asr import get_transcript_cached
+    from .lexicon import parse_glossary_arg
     tr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
                                lang=ns.lang or "auto", model=ns.model,
-                               fresh=ns.fresh)
+                               fresh=ns.fresh,
+                               glossary=parse_glossary_arg(ns.glossary))
     files = media_mod.save_subtitle(tr["segments"], out_dir, base="transcript")
     detail = out_dir / "asr.json"
     import json
@@ -183,11 +187,12 @@ def cmd_prepare(ns) -> int:
     overrides = {"mode": ns.frames_mode, "count": ns.frames_count,
                  "fps": ns.frames_fps, "size": ns.frames_size}
     out = Path(ns.out) if ns.out else None
+    from .lexicon import parse_glossary_arg
     m = prepare_mod.build(
         target, mod, meta, granularity=ns.granularity,
         frames_overrides=overrides, no_asr=ns.no_asr, cookiefile=cookiefile,
         out_dir=out, fresh=ns.fresh, asr_model=ns.asr_model,
-        asr_lang=ns.lang)
+        asr_lang=ns.lang, glossary=parse_glossary_arg(ns.glossary))
     emit({
         "granularity": m["granularity"],
         "video": m["video"],
@@ -252,6 +257,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-asr", action="store_true", help="无CC时报错而不做ASR")
     sp.add_argument("--asr-model", default="sensevoice",
                     help="ASR 引擎: sensevoice | whisper-small | whisper-large-v3")
+    sp.add_argument("--glossary", default=None,
+                    help="术语表:'误写=标准词;误写2=标准词2' 内联,或 JSON 文件路径")
     sp.set_defaults(fn=cmd_subs)
 
     sp = sub.add_parser("transcribe", help="语音转文字(本地ASR)")
@@ -261,6 +268,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="sensevoice | whisper-small | whisper-large-v3")
     sp.add_argument("--format", default="txt",
                     choices=["txt", "srt", "vtt", "json"])
+    sp.add_argument("--glossary", default=None,
+                    help="术语表:'误写=标准词;误写2=标准词2' 内联,或 JSON 文件路径")
     sp.set_defaults(fn=cmd_transcribe)
 
     sp = sub.add_parser("frames", help="拆帧(count/fps/scene/keyframe)")
@@ -291,6 +300,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--lang", default="auto")
     sp.add_argument("--no-asr", action="store_true")
     sp.add_argument("--asr-model", default="sensevoice")
+    sp.add_argument("--glossary", default=None,
+                    help="术语表:'误写=标准词;误写2=标准词2' 内联,或 JSON 文件路径")
     sp.set_defaults(fn=cmd_prepare)
 
     sp = sub.add_parser("cache", help="缓存管理")

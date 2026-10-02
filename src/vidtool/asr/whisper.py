@@ -15,7 +15,8 @@ _MODEL_MAP = {
 
 
 def transcribe(media_path: str, *, lang: str = "auto",
-               model: str = "whisper") -> dict:
+               model: str = "whisper",
+               glossary: dict[str, str] | None = None) -> dict:
     try:
         from faster_whisper import WhisperModel
     except Exception as e:
@@ -39,6 +40,8 @@ def transcribe(media_path: str, *, lang: str = "auto",
         if text:
             segments.append({"start": round(s.start, 3), "end": round(s.end, 3),
                              "text": text})
+    from ..lexicon import normalize_segments
+    segments = normalize_segments(segments, glossary)
     return {
         "engine": "faster-whisper",
         "model": size,

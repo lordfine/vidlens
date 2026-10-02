@@ -47,7 +47,8 @@ def build(target, mod, meta, *, granularity: str = "medium",
           frames_overrides: dict | None = None, no_asr: bool = False,
           cookiefile: str | None = None, out_dir: Path | None = None,
           fresh: bool = False, asr_model: str = "sensevoice",
-          asr_lang: str = "auto") -> dict:
+          asr_lang: str = "auto",
+          glossary: dict[str, str] | None = None) -> dict:
     g = GRANULARITY[granularity]
     vdir = cache_mod.video_dir(meta["platform"], meta["video_id"])
     jdir = out_dir or (vdir / "jobs" / f"prepare-{time.strftime('%Y%m%d-%H%M%S')}")
@@ -86,7 +87,7 @@ def build(target, mod, meta, *, granularity: str = "medium",
         audio = mod.download(target, meta, cookiefile, "audio", 1080, fresh)
         tr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
                                    lang=asr_lang or "auto", model=asr_model,
-                                   fresh=fresh)
+                                   fresh=fresh, glossary=glossary)
         segs = tr["segments"]
         sub_source = "asr"
         sub_files = media_mod.save_subtitle(segs, jdir, base="transcript")

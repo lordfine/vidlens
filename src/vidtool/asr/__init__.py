@@ -16,28 +16,33 @@ from ..agentio import DependencyError, VidtoolError
 
 
 def get_transcript(media_path: str, *, lang: str = "auto",
-                    model: str = "sensevoice") -> dict:
+                    model: str = "sensevoice",
+                    glossary: dict[str, str] | None = None) -> dict:
     if model.startswith("whisper"):
         from . import whisper
-        return whisper.transcribe(media_path, lang=lang, model=model)
+        return whisper.transcribe(media_path, lang=lang, model=model,
+                                  glossary=glossary)
     from . import sensevoice
-    return sensevoice.transcribe(media_path, lang=lang)
+    return sensevoice.transcribe(media_path, lang=lang, glossary=glossary)
 
 
 def get_transcript_cached(platform: str, video_id: str, media_path: str, *,
                           lang: str = "auto", model: str = "sensevoice",
-                          fresh: bool = False) -> dict:
-    """ASR is expensive — cache transcripts per (video, engine, lang)."""
+                          fresh: bool = False,
+                          glossary: dict[str, str] | None = None) -> dict:
+    """ASR is expensive — cache per (video, engine, lang, glossary)."""
     import json as _json
-    from pathlib import Path as _Path
-    cf = cache_mod.video_dir(platform, video_id) / (
-        f"transcript-{model}-{(lang or 'auto')}.json")
+    from ..lexicon import glossary_hash
+    key = f"transcript-{model}-{(lang or 'auto')}"
+    if glossary:
+        key += f"-{glossary_hash(glossary)}"
+    cf = cache_mod.video_dir(platform, video_id) / f"{key}.json"
     if cf.is_file() and not fresh:
         try:
             return _json.loads(cf.read_text(encoding="utf-8"))
         except Exception:
             pass
-    tr = get_transcript(media_path, lang=lang, model=model)
+    tr = get_transcript(media_path, lang=lang, model=model, glossary=glossary)
     try:
         cf.write_text(_json.dumps(tr, ensure_ascii=False), encoding="utf-8")
     except OSError:

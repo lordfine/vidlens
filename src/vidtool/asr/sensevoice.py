@@ -14,8 +14,34 @@ MODEL_DIRNAME = "sensevoice"
 MODEL_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
              "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2")
 
-_SENT_END = "。！？；!?;. \n"
+_SENT_END = "。！？；!?\n"
 _SENT_SOFT = "，,、"
+
+_LATIN_TAIL = re.compile(r"[A-Za-z]{1,4}$")
+_LATIN_HEAD = re.compile(r"^[A-Za-z]{1,4}(?![A-Za-z])")
+
+
+def _merge_fragments(segs: list[dict]) -> list[dict]:
+    """Re-join words cut at chunk/sentence boundaries ("...省 to" + "ken的...").
+
+    Only merges when the previous tail and next head are short latin
+    fragments, the gap is under a second, and the previous segment has no
+    sentence-final punctuation — conservative by design.
+    """
+    out: list[dict] = []
+    for s in segs:
+        if out:
+            prev = out[-1]
+            tail = _LATIN_TAIL.search(prev["text"])
+            head = _LATIN_HEAD.match(s["text"])
+            near = 0 <= s["start"] - prev["end"] < 1.0
+            clean_end = prev["text"][-1] not in "。！？；!?;，,、. "
+            if tail and head and near and clean_end:
+                prev["text"] += s["text"]
+                prev["end"] = s["end"]
+                continue
+        out.append(dict(s))
+    return out
 
 
 def _model_dir() -> Path:
@@ -180,13 +206,15 @@ def _sentences_from_result(result, offset: float) -> list[dict]:
     def flush():
         nonlocal buf_tokens, buf_start, buf_end
         if buf_tokens:
-            text = _clean("".join(buf_tokens)
-                          if all(len(t) <= 2 for t in buf_tokens)
-                          else " ".join(buf_tokens))
-            text = text.strip(_SENT_SOFT + " ").strip()
+            text = "".join(buf_tokens)
+            text = re.sub(r"\s+", " ", text).strip(_SENT_SOFT + " ").strip()
+            # SentencePiece leaves spaces between CJK tokens ("盘 点") —
+            # drop spaces only *between* CJK chars, keep latin word gaps
+            cjk = r"\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af"
+            text = re.sub(
+                rf"(?<=[{cjk}])\s+(?=[{cjk}])", "", text)
             # keep only segments with real content (not bare punctuation)
-            if text and re.search(r"[\w\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]",
-                                  text):
+            if text and re.search(rf"[\w{cjk}]", text):
                 segs.append({"start": round(offset + buf_start, 3),
                              "end": round(offset + max(buf_end, buf_start + .3), 3),
                              "text": text})
@@ -214,7 +242,8 @@ def _load_samples(wav_path: str):
     return sr, samples
 
 
-def transcribe(media_path: str, *, lang: str = "auto") -> dict:
+def transcribe(media_path: str, *, lang: str = "auto",
+               glossary: dict[str, str] | None = None) -> dict:
     rec = _recognizer(lang)
     wav, duration = prepare_wav(media_path)
     segments: list[dict] = []
@@ -224,6 +253,9 @@ def transcribe(media_path: str, *, lang: str = "auto") -> dict:
         stream.accept_waveform(sr, samples)
         rec.decode_stream(stream)
         segments.extend(_sentences_from_result(stream.result, offset))
+    segments = _merge_fragments(segments)
+    from ..lexicon import normalize_segments
+    segments = normalize_segments(segments, glossary)
     if not segments:
         raise VidtoolError(
             "ASR 未识别出任何语音",
