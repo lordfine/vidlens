@@ -18,6 +18,8 @@ jobs:
         with:
           enable-cache: true
       - name: Sync dependencies
-        run: uv sync
+        run: uv sync --group dev
+      - name: Lint
+        run: uv run ruff check src tests
       - name: Unit tests
         run: uv run pytest -q

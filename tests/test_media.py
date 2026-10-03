@@ -1,6 +1,5 @@
 from vidlens.platforms import media
 
-
 SEGS = [
     {"start": 0.0, "end": 2.5, "text": "你好"},
     {"start": 2.5, "end": 5.0, "text": "世界"},

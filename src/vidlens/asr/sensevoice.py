@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import tarfile
 import re
+import tarfile
 from pathlib import Path
 
 from .. import cache as cache_mod
-from ..agentio import BlockedError, DependencyError, vidlensError
+from ..agentio import BlockedError, DependencyError, VidlensError
 from . import prepare_wav, split_wav
 
 MODEL_DIRNAME = "sensevoice"
@@ -71,7 +71,7 @@ def ensure_model() -> Path:
                         f.write(chunk)
                         done += len(chunk)
                 if total and done < total:
-                    raise IOError(f"download truncated {done}/{total}")
+                    raise OSError(f"download truncated {done}/{total}")
     except Exception as e:
         archive.unlink(missing_ok=True)
         raise BlockedError(
@@ -113,6 +113,7 @@ def ensure_ort_dll() -> None:
     try:
         import sysconfig
         from pathlib import Path
+
         import onnxruntime
         capi = Path(onnxruntime.__file__).parent / "capi"
         src = capi / "onnxruntime.dll"
@@ -220,7 +221,7 @@ def _sentences_from_result(result, offset: float) -> list[dict]:
                              "text": text})
         buf_tokens, buf_start, buf_end = [], None, None
 
-    for tok, t in zip(toks, ts):
+    for tok, t in zip(toks, ts, strict=False):
         if buf_start is None:
             buf_start = t
         buf_end = t
@@ -234,6 +235,7 @@ def _sentences_from_result(result, offset: float) -> list[dict]:
 
 def _load_samples(wav_path: str):
     import wave
+
     import numpy as np
     with wave.open(wav_path, "rb") as w:
         sr = w.getframerate()
@@ -257,7 +259,7 @@ def transcribe(media_path: str, *, lang: str = "auto",
     from ..lexicon import normalize_segments
     segments = normalize_segments(segments, glossary)
     if not segments:
-        raise vidlensError(
+        raise VidlensError(
             "ASR 未识别出任何语音",
             hint="视频可能没有语音(纯音乐/静音);或语言设置不对,试 --lang auto。",
             errcode="no_speech")

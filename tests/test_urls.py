@@ -1,7 +1,7 @@
 import pytest
 
 from vidlens import urls
-from vidlens.agentio import NotSupportedError, vidlensError
+from vidlens.agentio import NotSupportedError, VidlensError
 
 
 class TestClassify:
@@ -45,7 +45,7 @@ class TestClassify:
             urls.classify("https://www.youtube.com/watch?v=abc", expand=False)
 
     def test_not_url(self):
-        with pytest.raises(vidlensError) as e:
+        with pytest.raises(VidlensError) as e:
             urls.classify("随便一段文字")
         assert e.value.errcode == "bad_url"
 

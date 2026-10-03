@@ -5,7 +5,7 @@ from __future__ import annotations
 import yt_dlp
 
 from .. import ffutil
-from ..agentio import NotSupportedError, vidlensError
+from ..agentio import NotSupportedError
 from ..urls import Target
 from . import interpret_ytdlp_error, load_meta, save_meta, ytdlp_opts
 from . import media as media_mod
@@ -17,7 +17,7 @@ def _info(target: Target, cookiefile: str | None, download: bool = False) -> dic
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(target.url, download=download)
     except Exception as e:
-        raise interpret_ytdlp_error("bilibili", e)
+        raise interpret_ytdlp_error("bilibili", e) from e
 
 
 def fetch_meta(target: Target, cookiefile: str | None,
@@ -134,11 +134,14 @@ def fetch_subtitles(target: Target, meta: dict, cookiefile: str | None,
 
 
 def download(target: Target, meta: dict, cookiefile: str | None, kind: str,
-             max_height: int, fresh: bool) -> str:
+             max_height: int, fresh: bool) -> dict:
+    """Platform download contract: {path, source_level, retried}.
+    bilibili has no direct-link chain, so everything is yt-dlp."""
     try:
         ff = ffutil.ffmpeg_path()
     except Exception:
         ff = None
-    return str(media_mod.download_media(
+    p = media_mod.download_media(
         meta, kind=kind, cookiefile=cookiefile, max_height=max_height,
-        fresh=fresh, ffmpeg_location=ff))
+        fresh=fresh, ffmpeg_location=ff)
+    return {"path": str(p), "source_level": "ytdlp", "retried": False}

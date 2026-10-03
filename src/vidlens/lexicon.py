@@ -34,7 +34,7 @@ DEFAULT_GLOSSARY: dict[str, str] = {
     "api": "API", "mcp": "MCP", "sdk": "SDK", "cli": "CLI", "gui": "GUI",
     "llm": "LLM", "rag": "RAG", "agent": "agent", "token": "token",
     "prompt": "prompt", "skill": "skill", "plugin": "plugin", "hook": "hook",
-    "app": "App", "agent": "agent", "bug": "bug", "ui": "UI",
+    "app": "App", "bug": "bug", "ui": "UI",
     "web": "web", "webui": "WebUI", "fullstack": "fullstack",
     "html": "HTML", "css": "CSS", "json": "JSON", "yaml": "YAML",
     "http": "HTTP", "https": "HTTPS", "url": "URL", "uri": "URI",

@@ -20,7 +20,17 @@ whisper = ["faster-whisper>=1.0"]
 vidlens = "vidlens.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.8"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # long lines: hint/message strings are intentionally verbose
+]
 
 [build-system]
 requires = ["hatchling"]

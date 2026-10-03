@@ -12,9 +12,9 @@ from pathlib import Path
 
 from . import cache as cache_mod
 from . import frames as frames_mod
-from .platforms import media as media_mod
-from .agentio import vidlensError
+from .agentio import VidlensError
 from .asr import get_transcript_cached
+from .platforms import media as media_mod
 
 GRANULARITY = {
     "coarse": {
@@ -78,13 +78,14 @@ def build(target, mod, meta, *, granularity: str = "medium",
     if hasattr(mod, "fetch_subtitles"):
         try:
             track, segs = mod.fetch_subtitles(target, meta, cookiefile)
-        except vidlensError:
+        except VidlensError:
             track, segs = None, []
     if segs:
         sub_source = "cc"
         sub_files = media_mod.save_subtitle(segs, jdir, base="subtitle")
     elif not no_asr:
-        audio = mod.download(target, meta, cookiefile, "audio", 1080, fresh)
+        audio = mod.download(target, meta, cookiefile, "audio", 1080,
+                             fresh)["path"]
         tr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
                                    lang=asr_lang or "auto", model=asr_model,
                                    fresh=fresh, glossary=glossary)
@@ -109,28 +110,37 @@ def build(target, mod, meta, *, granularity: str = "medium",
                         if v is not None})
     video = mod.download(target, meta, cookiefile, "video",
                          g["max_height"], fresh)
-    recs = frames_mod.extract(
-        video, jdir / "frames", mode=fparams["mode"],
+    fres = frames_mod.extract(
+        video["path"], jdir / "frames", mode=fparams["mode"],
         fps=fparams.get("fps", 1.0), count=fparams.get("count", 12),
         threshold=fparams.get("threshold", 0.3),
         size=fparams.get("size"), fmt=fparams.get("fmt", "jpg"),
         duration=meta.get("duration"))
+    recs = fres.records
     scene_recs = []
+    scene_truncated = False
     if g["scene_pass"]:
         try:
-            scene_recs = frames_mod.extract(
-                video, jdir / "frames_scene", mode="scene", size=fparams.get("size"),
-                duration=meta.get("duration"))
-        except vidlensError:
+            sres = frames_mod.extract(
+                video["path"], jdir / "frames_scene", mode="scene",
+                size=fparams.get("size"), duration=meta.get("duration"))
+            scene_recs = sres.records
+            scene_truncated = sres.truncated
+        except VidlensError:
             scene_recs = []
     manifest["frames"] = {"params": fparams, "files": recs,
-                          "scene_files": scene_recs}
+                          "truncated": fres.truncated,
+                          "total_candidates": fres.total_candidates,
+                          "scene_files": scene_recs,
+                          "scene_truncated": scene_truncated}
     cs_path = None
     if g["contact"] and recs:
         cs = jdir / "contact_sheet.jpg"
         cs_path = frames_mod.contact_sheet(recs, cs)
         manifest["contact_sheet"] = cs_path
-    manifest["files"]["video_local"] = str(video)
+    manifest["files"]["video_local"] = video["path"]
+    manifest["media"] = {"source_level": video["source_level"],
+                         "retried": video["retried"]}
     manifest["files"]["frames_dir"] = str(jdir / "frames")
 
     # ---- 3. context.md ----

@@ -1,20 +1,33 @@
 """Frame extraction: fps / count / scene / keyframe modes + contact sheet.
 
-All frames are timestamped filenames (frame_0007_83.40s.jpg) and the return
-value is a manifest list: [{file, t, width, height, bytes}].
+All frames are timestamped filenames (frame_0007_83.40s.jpg). extract()
+returns an ExtractResult so capping at MAX_FRAMES is always visible.
 """
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from pathlib import Path
+from typing import NamedTuple
 
 from . import ffutil
-from .agentio import vidlensError
+from .agentio import VidlensError
 
 MAX_FRAMES = 60
+
+
+class ExtractResult(NamedTuple):
+    records: list[dict]
+    truncated: bool
+    total_candidates: int
+
+
+def _finalize(recs: list[dict]) -> ExtractResult:
+    total = len(recs)
+    return ExtractResult(records=recs[:MAX_FRAMES],
+                         truncated=total > MAX_FRAMES,
+                         total_candidates=total)
 
 
 def _scale_filter(size: int | None) -> str:
@@ -45,17 +58,19 @@ def _frame_record(p: Path, t: float | None, idx: int) -> dict:
 
 def extract(media: str, out_dir: Path, *, mode: str, fps: float = 1.0,
             count: int = 12, threshold: float = 0.3, size: int | None = 1280,
-            fmt: str = "jpg", duration: float | None = None) -> list[dict]:
-    """Extract frames into out_dir; returns manifest records."""
+            fmt: str = "jpg", duration: float | None = None) -> ExtractResult:
+    """Extract frames into out_dir; returns ExtractResult(records, truncated,
+    total_candidates) so silent capping can never happen."""
     out_dir.mkdir(parents=True, exist_ok=True)
     for old in out_dir.glob(f"frame_*.{fmt}"):
         old.unlink(missing_ok=True)
 
     if mode == "count":
-        return _extract_count(media, out_dir, count, size, fmt, duration)
+        return _finalize(_extract_count(media, out_dir, count, size, fmt,
+                                        duration))
     if mode == "fps":
-        return _extract_stream(media, out_dir, mode, fps=fps, size=size,
-                               fmt=fmt, duration=duration)
+        return _finalize(_extract_stream(media, out_dir, mode, fps=fps,
+                                         size=size, fmt=fmt, duration=duration))
     if mode == "scene":
         # scene scores vary wildly with compression (douyin re-encodes score
         # low); auto-lower the threshold when nothing is detected
@@ -68,16 +83,17 @@ def extract(media: str, out_dir: Path, *, mode: str, fps: float = 1.0,
             recs = _extract_stream(media, out_dir, mode, threshold=th,
                                    size=size, fmt=fmt)
             if recs:
-                return recs
+                return _finalize(recs)
             for old in out_dir.glob(f"frame_*.{fmt}"):
                 old.unlink(missing_ok=True)
-        raise vidlensError(
+        raise VidlensError(
             f"scene 模式没有检出镜头切换 (试过阈值 {tried})",
             hint="该视频可能没有明显镜头切换;改用 --mode count 或 --mode fps。",
             errcode="no_frames")
     if mode == "keyframe":
-        return _extract_stream(media, out_dir, mode, size=size, fmt=fmt)
-    raise vidlensError(f"未知拆帧模式: {mode}",
+        return _finalize(_extract_stream(media, out_dir, mode, size=size,
+                                         fmt=fmt))
+    raise VidlensError(f"未知拆帧模式: {mode}",
                        hint="可选: count | fps | scene | keyframe。",
                        errcode="bad_args")
 
@@ -97,7 +113,7 @@ def _extract_count(media: str, out_dir: Path, count: int, size: int | None,
     count = max(1, min(int(count), MAX_FRAMES))
     dur = duration or ffutil.probe_duration(media)
     if not dur:
-        raise vidlensError(
+        raise VidlensError(
             "无法确定视频时长(count 模式需要)",
             hint="元数据缺失且 ffmpeg 探测失败;先运行 `vidlens meta <url>` 刷新缓存。",
             errcode="no_duration")
@@ -115,7 +131,7 @@ def _extract_count(media: str, out_dir: Path, count: int, size: int | None,
         if r.returncode == 0 and out.is_file() and out.stat().st_size > 0:
             recs.append(_frame_record(out, t, i))
     if not recs:
-        raise vidlensError(
+        raise VidlensError(
             "拆帧失败: 一帧也没有抽出",
             hint=f"ffmpeg 最后输出: {_last_err()};运行 `vidlens doctor` 检查。",
             errcode="ffmpeg_failed")
@@ -158,7 +174,7 @@ def _extract_stream(media: str, out_dir: Path, mode: str, *,
     # everything — that means "0 frames", not a real failure
     empty_output = "Nothing was written into output file" in r.stderr
     if r.returncode != 0 and not empty_output:
-        raise vidlensError(
+        raise VidlensError(
             f"拆帧失败 (ffmpeg, mode={mode})",
             hint=f"ffmpeg stderr 尾部: {_last_err()}", errcode="ffmpeg_failed")
 
@@ -174,10 +190,10 @@ def _extract_stream(media: str, out_dir: Path, mode: str, *,
         # caller (extract) retries with lower thresholds
         if mode == "scene":
             return []
-        raise vidlensError("拆帧失败: 一帧也没有抽出",
+        raise VidlensError("拆帧失败: 一帧也没有抽出",
                            hint=f"ffmpeg stderr 尾部: {_last_err()}",
                            errcode="ffmpeg_failed")
-    return recs[:MAX_FRAMES]
+    return recs  # full list; extract() caps via _finalize with a visible flag
 
 
 def _idx_from_name(name: str) -> int:
@@ -193,7 +209,7 @@ def contact_sheet(records: list[dict], out_path: Path, *,
     from PIL import Image, ImageDraw
 
     if not records:
-        raise vidlensError("没有帧可用于拼图", hint="先成功拆帧再生成 contact sheet。",
+        raise VidlensError("没有帧可用于拼图", hint="先成功拆帧再生成 contact sheet。",
                            errcode="no_frames")
     n = len(records)
     cols = cols or max(1, int(n ** 0.5 + 0.999))

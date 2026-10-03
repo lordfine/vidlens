@@ -1,6 +1,10 @@
-from vidlens.lexicon import (DEFAULT_GLOSSARY, glossary_hash,
-                             normalize_segments, normalize_text,
-                             parse_glossary_arg)
+from vidlens.lexicon import (
+    DEFAULT_GLOSSARY,
+    glossary_hash,
+    normalize_segments,
+    normalize_text,
+    parse_glossary_arg,
+)
 
 
 def test_squash_fixes_fragmented_terms():

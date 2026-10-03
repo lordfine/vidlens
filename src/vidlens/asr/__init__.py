@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .. import cache as cache_mod
 from .. import ffutil
-from ..agentio import DependencyError, vidlensError
+from ..agentio import VidlensError
 
 
 def get_transcript(media_path: str, *, lang: str = "auto",
@@ -32,6 +32,7 @@ def get_transcript_cached(platform: str, video_id: str, media_path: str, *,
                           glossary: dict[str, str] | None = None) -> dict:
     """ASR is expensive — cache per (video, engine, lang, glossary)."""
     import json as _json
+
     from ..lexicon import glossary_hash
     key = f"transcript-{model}-{(lang or 'auto')}"
     if glossary:
@@ -74,7 +75,7 @@ def split_wav(wav: str, segment_secs: float = 30.0) -> list[tuple[str, float]]:
                      "-segment_time", str(segment_secs), "-c", "copy",
                      str(pattern)])
     if r.returncode != 0 or not list(out_dir.glob("chunk_*.wav")):
-        raise vidlensError("长音频分块失败",
+        raise VidlensError("长音频分块失败",
                            hint=f"ffmpeg stderr 尾部: {r.stderr[-300:]}",
                            errcode="ffmpeg_failed")
     return [(str(p), i * segment_secs)

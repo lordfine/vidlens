@@ -1,5 +1,4 @@
-from vidlens.textflow import (fmt_stamp, join_sentences, render_paragraphs,
-                              to_paragraphs)
+from vidlens.textflow import fmt_stamp, join_sentences, render_paragraphs, to_paragraphs
 
 
 def test_join_cjk_no_space_latin_space():

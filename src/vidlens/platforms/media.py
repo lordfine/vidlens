@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from pathlib import Path
 
 import httpx
 
 from .. import cache as cache_mod
-from ..agentio import BlockedError, vidlensError
+from ..agentio import BlockedError
 from . import interpret_ytdlp_error, ytdlp_opts
-
 
 # ---------------------------------------------------------------- media ----
 
@@ -24,6 +22,19 @@ def media_cache_path(platform: str, video_id: str, kind: str) -> Path:
 def download_media(meta: dict, *, kind: str, cookiefile: str | None,
                    max_height: int = 1080, fresh: bool = False,
                    ffmpeg_location: str | None = None) -> Path:
+    """Download video or best-audio into the cache; returns local path.
+    Holds the per-video write lock so concurrent runs can't corrupt files."""
+    from ..locking import cache_write_lock
+    with cache_write_lock(media_cache_path(meta["platform"],
+                                           meta["video_id"], kind).parent):
+        return _download_media_locked(
+            meta, kind=kind, cookiefile=cookiefile, max_height=max_height,
+            fresh=fresh, ffmpeg_location=ffmpeg_location)
+
+
+def _download_media_locked(meta: dict, *, kind: str, cookiefile: str | None,
+                           max_height: int = 1080, fresh: bool = False,
+                           ffmpeg_location: str | None = None) -> Path:
     """Download video or best-audio into the cache; returns local path."""
     platform, vid = meta["platform"], meta["video_id"]
     dest = media_cache_path(platform, vid, kind)
@@ -55,7 +66,7 @@ def download_media(meta: dict, *, kind: str, cookiefile: str | None,
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([meta["webpage_url"]])
     except Exception as e:
-        raise interpret_ytdlp_error(platform, e)
+        raise interpret_ytdlp_error(platform, e) from e
 
     # find what yt-dlp actually produced
     if not dest.is_file():

@@ -1,6 +1,5 @@
 from vidlens.platforms import douyin
 
-
 FAKE_ITEM = {
     "aweme_id": "7607060532303169189",
     "desc": "测试视频描述 #标签",
@@ -39,9 +38,12 @@ def test_normalize_item_seconds_duration():
 
 def test_play_urls_nowatermark_first():
     urls = douyin._play_urls(FAKE_ITEM)
-    assert urls[0] == ("https://aweme.snssdk.com/aweme/v1/play/?ratio=720p"
+    assert urls[0] == ("no_watermark",
+                       "https://aweme.snssdk.com/aweme/v1/play/?ratio=720p"
                        "&video_id=v1e00fgi")
-    assert any("playwm" in u for u in urls)  # watermark fallback kept
+    assert ("watermark",
+            "https://aweme.snssdk.com/aweme/v1/playwm/?ratio=720p"
+            "&video_id=v1e00fgi") in urls
 
 
 def test_map_lang():

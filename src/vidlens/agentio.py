@@ -23,7 +23,7 @@ EXIT_BLOCKED = 3
 EXIT_DEPS = 4
 
 
-class vidlensError(Exception):
+class VidlensError(Exception):
     """Base error carrying an agent-facing code + hint."""
 
     errcode = "error"
@@ -40,22 +40,22 @@ class vidlensError(Exception):
             self.exit_code = exit_code
 
 
-class AuthNeededError(vidlensError):
+class AuthNeededError(VidlensError):
     errcode = "auth_needed"
     exit_code = EXIT_AUTH
 
 
-class BlockedError(vidlensError):
+class BlockedError(VidlensError):
     errcode = "blocked"
     exit_code = EXIT_BLOCKED
 
 
-class DependencyError(vidlensError):
+class DependencyError(VidlensError):
     errcode = "dependency_missing"
     exit_code = EXIT_DEPS
 
 
-class NotSupportedError(vidlensError):
+class NotSupportedError(VidlensError):
     errcode = "not_supported"
     exit_code = EXIT_ERROR
 
@@ -72,7 +72,7 @@ def emit(payload: dict, *, pretty: bool = False) -> None:
     sys.stdout.flush()
 
 
-def emit_error(err: vidlensError, *, pretty: bool = False) -> int:
+def emit_error(err: VidlensError, *, pretty: bool = False) -> int:
     """Print a structured error to stderr; returns the exit code."""
     obj = {
         "ok": False,

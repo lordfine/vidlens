@@ -67,8 +67,8 @@ def make_wav(media_path: str, wav_path: str) -> str:
     r = _run(["-y", "-i", media_path, "-vn", "-ac", "1", "-ar", "16000",
               "-c:a", "pcm_s16le", wav_path])
     if r.returncode != 0 or not os.path.isfile(wav_path):
-        from .agentio import vidlensError
-        raise vidlensError(
+        from .agentio import VidlensError
+        raise VidlensError(
             "音频抽取失败 (ffmpeg)",
             hint=f"ffmpeg stderr 尾部: {r.stderr[-400:]};文件可能无音轨或已损坏,"
                  "可先运行 `vidlens doctor`。", errcode="ffmpeg_failed")

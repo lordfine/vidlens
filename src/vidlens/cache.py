@@ -135,7 +135,7 @@ def clean(*, max_bytes: int = DEFAULT_MAX_BYTES, all_: bool = False) -> dict:
     # candidates: per-video media and job dirs, oldest first
     cands: list[tuple[float, Path, int]] = []
     for vd in cache.glob("*/*"):
-        for sub, is_media in ((vd / "media", True), (vd / "jobs", False)):
+        for sub in (vd / "media", vd / "jobs"):
             if sub.is_dir():
                 cands.append((sub.stat().st_mtime, sub, _dir_size(sub)))
     cands.sort()

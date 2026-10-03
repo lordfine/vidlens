@@ -6,16 +6,14 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import __version__, urls
 from . import cache as cache_mod
 from . import doctor as doctor_mod
 from . import frames as frames_mod
 from . import prepare as prepare_mod
-from . import urls
-from .platforms import media as media_mod
-from .agentio import (DependencyError, NotSupportedError, vidlensError,
-                      emit, emit_error)
+from .agentio import NotSupportedError, VidlensError, emit, emit_error
 from .platforms import cookie_from_args
+from .platforms import media as media_mod
 
 PLATFORMS = {"bilibili": "vidlens.platforms.bilibili",
              "douyin": "vidlens.platforms.douyin"}
@@ -81,7 +79,7 @@ def cmd_subs(ns) -> int:
         try:
             track, segs = mod.fetch_subtitles(target, meta, cookiefile,
                                               lang=ns.lang)
-        except vidlensError as e:
+        except VidlensError as e:
             if e.errcode in ("auth_needed", "blocked"):
                 raise
             track, segs = None, []
@@ -90,11 +88,12 @@ def cmd_subs(ns) -> int:
     asr = None
     if not segs:
         if ns.no_asr:
-            raise vidlensError(
+            raise VidlensError(
                 "该视频没有可用字幕(CC)且 --no-asr 已指定",
                 hint="去掉 --no-asr 自动语音转文字,或运行 "
                      "`vidlens transcribe`。", errcode="no_subtitles")
-        audio = mod.download(target, meta, cookiefile, "audio", 1080, ns.fresh)
+        audio = mod.download(target, meta, cookiefile, "audio", 1080,
+                             ns.fresh)["path"]
         from .asr import get_transcript_cached
         from .lexicon import parse_glossary_arg
         asr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
@@ -127,7 +126,8 @@ def cmd_transcribe(ns) -> int:
                                         ns.fresh)
     meta = mod.fetch_meta(target, cookiefile, fresh=ns.fresh)
     out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "asr")
-    audio = mod.download(target, meta, cookiefile, "audio", 1080, ns.fresh)
+    audio = mod.download(target, meta, cookiefile, "audio", 1080,
+                         ns.fresh)["path"]
     from .asr import get_transcript_cached
     from .lexicon import parse_glossary_arg
     tr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
@@ -161,21 +161,32 @@ def cmd_frames(ns) -> int:
     out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "frames")
     video = mod.download(target, meta, cookiefile, "video", ns.max_height,
                          ns.fresh)
-    recs = frames_mod.extract(
-        str(video), out_dir, mode=ns.mode, fps=ns.fps, count=ns.count,
+    res = frames_mod.extract(
+        video["path"], out_dir, mode=ns.mode, fps=ns.fps, count=ns.count,
         threshold=ns.threshold, size=ns.size, fmt=ns.format,
         duration=meta.get("duration"))
+    recs = res.records
     cs = None
     if ns.contact_sheet:
         cs = frames_mod.contact_sheet(recs, out_dir / "contact_sheet.jpg")
+    hint = ("frames[].file 是图片绝对路径,agent 可直接按图片读取;"
+            "时间戳在 t 字段(秒)。")
+    if res.truncated:
+        hint = (f"警告: 候选帧共 {res.total_candidates} 张,超出上限 "
+                f"{frames_mod.MAX_FRAMES} 已截断;需要更细颗粒度请提高 "
+                "--fps 或分时间段多次拆帧。" + hint)
     emit({
         "mode": ns.mode,
         "count": len(recs),
-        "video": str(video),
+        "truncated": res.truncated,
+        "total_candidates": res.total_candidates,
+        "video": video["path"],
+        "media_source_level": video["source_level"],
+        "media_retried": video["retried"],
         "frames": recs,
         "contact_sheet": cs,
         "out_dir": str(out_dir),
-        "hint": "frames[].file 是图片绝对路径,agent 可直接按图片读取;时间戳在 t 字段(秒)。",
+        "hint": hint,
     }, pretty=ns.pretty)
     return 0
 
@@ -332,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     ns = build_parser().parse_args(argv)
     try:
         return ns.fn(ns)
-    except vidlensError as e:
+    except VidlensError as e:
         return emit_error(e, pretty=ns.pretty)
     except KeyboardInterrupt:
         sys.stderr.write('{"ok": false, "error": {"code": "interrupted", '
@@ -340,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
         return 130
     except Exception as e:  # never break the JSON contract
         return emit_error(
-            vidlensError(f"内部错误: {type(e).__name__}: {e}",
+            VidlensError(f"内部错误: {type(e).__name__}: {e}",
                          hint="这是 bug,可带完整命令重试;运行 `vidlens doctor` "
                               "排查环境;持续失败请反馈。",
                          errcode="internal_error"),

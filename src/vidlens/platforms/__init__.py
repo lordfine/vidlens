@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..agentio import AuthNeededError, BlockedError, vidlensError
 from .. import cache as cache_mod
+from ..agentio import AuthNeededError, BlockedError, VidlensError
 
 
 def write_cookie_file(platform: str, cookie: str) -> Path:
@@ -29,7 +29,7 @@ def cookie_from_args(platform: str, cookie: str | None,
     if cookie_file:
         p = Path(cookie_file)
         if not p.is_file():
-            raise vidlensError(f"cookie 文件不存在: {cookie_file}",
+            raise VidlensError(f"cookie 文件不存在: {cookie_file}",
                                hint="检查 --cookie-file 路径,或改用 --cookie 直接传 "
                                     "SESSDATA=xxx / 抖音 cookie 字符串。",
                                errcode="bad_cookie")
@@ -58,7 +58,17 @@ def ytdlp_opts(*, cookiefile: str | None, ffmpeg: str | None = None) -> dict:
     return opts
 
 
-def interpret_ytdlp_error(platform: str, e: Exception) -> vidlensError:
+def _cookie_hint(platform: str) -> str:
+    """ADR-0004: the hint is an executable instruction for the agent."""
+    how = ("B站: 浏览器 F12 → Network → 任意请求 → Request Headers → cookie "
+           "整段(核心是 SESSDATA)" if platform == "bilibili" else
+           "抖音: 浏览器 F12 → Network → 任意请求 → Request Headers → cookie 整段")
+    return (f"两条路任选:(1) 你(agent)用浏览器自动化(CDP)直接从用户浏览器读取 "
+            f"{platform} 的 cookie,整段传给 --cookie 重试;(2) 请用户按此法手动复制"
+            f"提供——{how}。cookie 只在本机缓存目录暂存。")
+
+
+def interpret_ytdlp_error(platform: str, e: Exception) -> VidlensError:
     """Map yt-dlp DownloadError to agent-friendly codes/hints."""
     msg = str(getattr(e, "msg", e))
     low = msg.lower()
@@ -66,16 +76,14 @@ def interpret_ytdlp_error(platform: str, e: Exception) -> vidlensError:
             "required" in low or "provide" in low or "log in" in low):
         return AuthNeededError(
             f"该内容需要登录态: {msg[:200]}",
-            hint=f"请让用户提供 {platform} 的 cookie(--cookie 'SESSDATA=...' 或整段 "
-                 "cookie 字符串)后重试。B站可在浏览器 F12 → Network 任意请求的 "
-                 "Request Headers → cookie 里复制。")
+            hint=_cookie_hint(platform))
     if any(k in low for k in ("403", "429", "captcha", "verify", "blocked",
                               "risk", "forbidden", "unavailable")):
         return BlockedError(
             f"被平台拦截或网络不可达: {msg[:200]}",
             hint="稍后重试;或用 --cookie 带登录态;抖音风控常见,换个链接或稍后再试。")
     if "private" in low or "removed" in low or "404" in low or "not found" in low:
-        return vidlensError(
+        return VidlensError(
             f"内容不存在或不可访问: {msg[:200]}",
             hint="确认链接是否有效、视频是否被删除/设为私密。",
             errcode="content_gone")

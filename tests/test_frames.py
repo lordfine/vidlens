@@ -24,6 +24,7 @@ def test_idx_from_name():
 
 def test_extract_unknown_mode(tmp_path):
     import pytest
-    from vidlens.agentio import vidlensError
-    with pytest.raises(vidlensError):
+
+    from vidlens.agentio import VidlensError
+    with pytest.raises(VidlensError):
         frames.extract("x.mp4", tmp_path, mode="nope")

@@ -16,7 +16,7 @@ import yt_dlp
 
 from .. import cache as cache_mod
 from .. import ffutil
-from ..agentio import (BlockedError, NotSupportedError, vidlensError)
+from ..agentio import BlockedError, NotSupportedError
 from ..urls import Target
 from . import interpret_ytdlp_error, load_meta, save_meta, ytdlp_opts
 from . import media as media_mod
@@ -127,6 +127,23 @@ def _fetch_item(vid: str, cookiefile: str | None) -> dict | None:
         return None
 
 
+def _fetch_item_with_refresh(vid: str, cookiefile: str | None) -> dict | None:
+    """Fetch item; if it fails with our auto-ttwid present, silently
+    re-register ttwid once and retry (ADR-0004). User cookies are never
+    touched."""
+    item = _fetch_item(vid, cookiefile)
+    if item is None and not cookiefile:
+        auto = cache_mod.cookies_dir() / "douyin-auto.txt"
+        if auto.is_file():
+            try:
+                auto.unlink()
+            except OSError:
+                return None
+            ensure_ttwid_cookie()
+            item = _fetch_item(vid, cookiefile)
+    return item
+
+
 def _normalize_item(item: dict) -> dict:
     video = item.get("video") or {}
     author = item.get("author") or {}
@@ -166,7 +183,7 @@ def fetch_meta(target: Target, cookiefile: str | None,
     if cached:
         return cached
 
-    item = _fetch_item(vid, cookiefile)
+    item = _fetch_item_with_refresh(vid, cookiefile)
     if item:
         if item.get("images"):
             raise NotSupportedError(
@@ -189,7 +206,7 @@ def fetch_meta(target: Target, cookiefile: str | None,
     except Exception as e:
         err = interpret_ytdlp_error("douyin", e)
         if err.errcode == "content_gone":
-            raise err
+            raise err from e
         # else: fall through to the blocked error below
 
     raise BlockedError(
@@ -219,68 +236,81 @@ def _ytdlp_normalize(info: dict, target: Target) -> dict:
     }
 
 
-def _play_urls(item: dict) -> list[str]:
-    """Candidate direct-play URLs: no-watermark first, then watermark."""
+def _play_urls(item: dict) -> list[tuple[str, str]]:
+    """Fallback chain as (source_level, url): no-watermark first, then
+    watermark. Level names are part of the Agent Contract vocabulary."""
     video = item.get("video") or {}
-    urls: list[str] = []
     pa = (video.get("play_addr") or {}).get("url_list") or []
+    out: list[tuple[str, str]] = []
     for u in pa:
         if "playwm" in u:
-            urls.append(u.replace("playwm", "play"))
-    urls.extend(pa)
-    return urls
+            out.append(("no_watermark", u.replace("playwm", "play")))
+    for u in pa:
+        out.append(("watermark", u))
+    return out
+
+
+def _download_url(url: str, dest, jar: dict) -> bool:
+    """Single direct-download attempt. Returns True on a plausible file."""
+    import httpx
+    try:
+        with httpx.Client(timeout=60, follow_redirects=True, cookies=jar,
+                          headers={"User-Agent": MOBILE_UA,
+                                   "Referer": "https://www.douyin.com/"}) as c:
+            with c.stream("GET", url) as resp:
+                if resp.status_code != 200:
+                    return False
+                with open(dest, "wb") as f:
+                    for chunk in resp.iter_bytes(1 << 20):
+                        f.write(chunk)
+    except Exception:
+        return False
+    return dest.is_file() and dest.stat().st_size > 1024
+
+
+def _download_with_fallback(item: dict, dest, jar: dict) -> str | None:
+    """Walk the fallback chain; returns the source_level that worked."""
+    for level, url in _play_urls(item):
+        if _download_url(url, dest, jar):
+            return level
+    return None
 
 
 def download(target: Target, meta: dict, cookiefile: str | None, kind: str,
-             max_height: int, fresh: bool) -> str:
-    """Download media. Douyin videos are short mp4s; audio-kind callers get
-    the same mp4 (ffmpeg extracts the wav for ASR downstream)."""
-    import httpx
-
+             max_height: int, fresh: bool) -> dict:
+    """Download media via the fallback chain. Returns the platform download
+    contract: {path, source_level, retried}."""
     dest = cache_mod.video_dir("douyin", meta["video_id"]) / "media" / "video.mp4"
     if dest.is_file() and dest.stat().st_size > 1024 and not fresh:
         try:
             dest.touch()
         except OSError:
             pass
-        return str(dest)
+        return {"path": str(dest), "source_level": "cache", "retried": False}
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     vid = meta.get("video_id") or target.video_id
-    item = _fetch_item(vid, cookiefile)
-    if not item:
-        # last resort: yt-dlp download (works with user cookie sometimes)
-        try:
-            ff = ffutil.ffmpeg_path()
-        except Exception:
-            ff = None
-        try:
-            return str(media_mod.download_media(
-                meta, kind=kind, cookiefile=cookiefile, max_height=max_height,
-                fresh=fresh, ffmpeg_location=ff))
-        except Exception as e:
-            raise interpret_ytdlp_error("douyin", e)
+    item = _fetch_item_with_refresh(vid, cookiefile)
+    if item:
+        jar = _cookie_jar(cookiefile)
+        level = _download_with_fallback(item, dest, jar)
+        if level:
+            return {"path": str(dest), "source_level": level, "retried": False}
+        # S2: direct links may be stale — refetch page data once, retry chain
+        item = _fetch_item_with_refresh(vid, cookiefile) or item
+        level = _download_with_fallback(item, dest, jar)
+        if level:
+            return {"path": str(dest), "source_level": level, "retried": True}
 
-    jar = _cookie_jar(cookiefile)
-    last_err = None
-    for url in _play_urls(item):
-        try:
-            with httpx.Client(timeout=60, follow_redirects=True, cookies=jar,
-                              headers={"User-Agent": MOBILE_UA,
-                                       "Referer": "https://www.douyin.com/"}) as c:
-                with c.stream("GET", url) as resp:
-                    if resp.status_code != 200:
-                        last_err = f"HTTP {resp.status_code}"
-                        continue
-                    with open(dest, "wb") as f:
-                        for chunk in resp.iter_bytes(1 << 20):
-                            f.write(chunk)
-            if dest.is_file() and dest.stat().st_size > 1024:
-                return str(dest)
-            last_err = "empty file"
-        except Exception as e:
-            last_err = str(e)[:200]
-    raise BlockedError(
-        f"抖音视频下载失败 ({last_err})",
-        hint="播放直链可能过期/被风控。重试一次;仍失败则用 --cookie 提供"
-             "浏览器抖音 cookie 后重试。")
+    # last resort: yt-dlp download (works with user cookie sometimes)
+    try:
+        ff = ffutil.ffmpeg_path()
+    except Exception:
+        ff = None
+    try:
+        p = media_mod.download_media(
+            meta, kind=kind, cookiefile=cookiefile, max_height=max_height,
+            fresh=fresh, ffmpeg_location=ff)
+        return {"path": str(p), "source_level": "ytdlp", "retried": False}
+    except Exception as e:
+        raise interpret_ytdlp_error("douyin", e) from e

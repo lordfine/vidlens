@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 import httpx
 
@@ -17,7 +17,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
 
 
-class Platform(str, Enum):
+class Platform(StrEnum):
     bilibili = "bilibili"
     douyin = "douyin"
     unknown = "unknown"
@@ -102,8 +102,8 @@ def expand_short(target: Target, *, timeout: float = 15.0) -> Target:
                                   f"https://www.douyin.com/video/{m.group(1)}",
                                   m.group(1), "video", raw=target.raw)
         raise _short_fail(target)
-    except httpx.HTTPError:
-        raise _short_fail(target)
+    except httpx.HTTPError as e:
+        raise _short_fail(target) from e
 
 
 def _short_fail(target: Target):
@@ -118,8 +118,8 @@ def _short_fail(target: Target):
 def classify(url_or_text: str, *, expand: bool = True) -> Target:
     url = normalize_input(url_or_text)
     if not re.match(r"^https?://", url):
-        from .agentio import vidlensError
-        raise vidlensError(
+        from .agentio import VidlensError
+        raise VidlensError(
             f"输入不是有效的视频链接: {url!r}",
             hint="提供抖音或B站的视频页/分享短链,例如 https://v.douyin.com/xxxx 或 "
                  "https://www.bilibili.com/video/BVxxxx。",
