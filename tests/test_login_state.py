@@ -67,10 +67,10 @@ def test_no_refresh_when_user_cookie_given(monkeypatch, tmp_path):
 
 def test_auth_hint_is_agent_executable():
     """exit 2 hint must contain the CDP route AND the --cookie flag."""
-    class FakeErr(Exception):
+    class FakeError(Exception):
         msg = "Login needed to access this"
 
-    err = interpret_ytdlp_error("bilibili", FakeErr())
+    err = interpret_ytdlp_error("bilibili", FakeError())
     assert isinstance(err, AuthNeededError)
     assert err.exit_code == 2
     assert "CDP" in err.hint or "浏览器自动化" in err.hint

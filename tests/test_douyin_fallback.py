@@ -61,12 +61,8 @@ def test_fallback_all_dead_returns_none(monkeypatch, tmp_path):
 
 # ------------------------------------------------------------------ S2 ----
 
-def test_download_retries_meta_once(monkeypatch, tmp_path):
+def test_download_retries_meta_once(monkeypatch, douyin_tmp_cache):
     """All URLs fail on first pass => meta re-fetched once, second pass wins."""
-    monkeypatch.setattr(douyin, "_cookie_jar", lambda cf: {})
-    monkeypatch.setattr(douyin, "cache_mod",
-                        type("C", (), {"video_dir": staticmethod(
-                            lambda p, v: tmp_path)})())
     attempts = {"n": 0}
 
     def fake_fetch(vid, cf):
@@ -91,12 +87,8 @@ def test_download_retries_meta_once(monkeypatch, tmp_path):
     assert attempts["n"] == 2
 
 
-def test_download_returns_dict_shape(monkeypatch, tmp_path):
+def test_download_returns_dict_shape(monkeypatch, douyin_tmp_cache):
     """Platform download contract: {path, source_level, retried}."""
-    monkeypatch.setattr(douyin, "_cookie_jar", lambda cf: {})
-    monkeypatch.setattr(douyin, "cache_mod",
-                        type("C", (), {"video_dir": staticmethod(
-                            lambda p, v: tmp_path)})())
     monkeypatch.setattr(douyin, "_fetch_item", lambda vid, cf: FAKE_ITEM)
 
     def fake_dl(url, dest, jar):
@@ -113,7 +105,7 @@ def test_download_returns_dict_shape(monkeypatch, tmp_path):
     assert out["path"].endswith("video.mp4")
 
 
-def test_download_wraps_direct_chain_in_lock(monkeypatch, tmp_path):
+def test_download_wraps_direct_chain_in_lock(monkeypatch, douyin_tmp_cache):
     """The direct-link path (not just yt-dlp) must hold the per-video lock."""
     import contextlib
 
@@ -125,10 +117,6 @@ def test_download_wraps_direct_chain_in_lock(monkeypatch, tmp_path):
         yield
 
     monkeypatch.setattr("vidlens.locking.cache_write_lock", fake_lock)
-    monkeypatch.setattr(douyin, "_cookie_jar", lambda cf: {})
-    monkeypatch.setattr(douyin, "cache_mod",
-                        type("C", (), {"video_dir": staticmethod(
-                            lambda p, v: tmp_path)})())
     monkeypatch.setattr(douyin, "_fetch_item", lambda vid, cf: FAKE_ITEM)
     monkeypatch.setattr(douyin, "_download_url",
                         lambda url, dest, jar: (_mk(dest), True)[1])

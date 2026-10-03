@@ -16,7 +16,7 @@ from pathlib import Path
 from .agentio import VidlensError
 
 
-class LockTimeout(VidlensError):
+class LockTimeoutError(VidlensError):
     errcode = "lock_timeout"
 
     def __init__(self, message: str = "缓存写锁获取超时"):
@@ -74,7 +74,7 @@ def cache_write_lock(lock_dir, timeout: float = 300.0) -> Iterator[None]:
                 acquired = True
                 break
             if time.monotonic() >= deadline:
-                raise LockTimeout()
+                raise LockTimeoutError()
             time.sleep(0.25)
         try:
             yield
