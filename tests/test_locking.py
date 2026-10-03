@@ -1,4 +1,4 @@
-"""S5: cross-process write lock for cache directories."""
+"""cross-process write lock for cache directories."""
 import pytest
 
 from vidlens.locking import LockTimeout, cache_write_lock

@@ -110,27 +110,27 @@ def build(target, mod, meta, *, granularity: str = "medium",
                         if v is not None})
     video = mod.download(target, meta, cookiefile, "video",
                          g["max_height"], fresh)
-    fres = frames_mod.extract(
+    frame_result = frames_mod.extract(
         video["path"], jdir / "frames", mode=fparams["mode"],
         fps=fparams.get("fps", 1.0), count=fparams.get("count", 12),
         threshold=fparams.get("threshold", 0.3),
         size=fparams.get("size"), fmt=fparams.get("fmt", "jpg"),
         duration=meta.get("duration"))
-    recs = fres.records
+    recs = frame_result.records
     scene_recs = []
     scene_truncated = False
     if g["scene_pass"]:
         try:
-            sres = frames_mod.extract(
+            scene_result = frames_mod.extract(
                 video["path"], jdir / "frames_scene", mode="scene",
                 size=fparams.get("size"), duration=meta.get("duration"))
-            scene_recs = sres.records
-            scene_truncated = sres.truncated
+            scene_recs = scene_result.records
+            scene_truncated = scene_result.truncated
         except VidlensError:
             scene_recs = []
     manifest["frames"] = {"params": fparams, "files": recs,
-                          "truncated": fres.truncated,
-                          "total_candidates": fres.total_candidates,
+                          "truncated": frame_result.truncated,
+                          "total_candidates": frame_result.total_candidates,
                           "scene_files": scene_recs,
                           "scene_truncated": scene_truncated}
     cs_path = None

@@ -1,4 +1,4 @@
-"""S4: frames.extract() reports truncation instead of silently dropping."""
+"""frames.extract() reports truncation instead of silently dropping."""
 
 from vidlens import frames
 

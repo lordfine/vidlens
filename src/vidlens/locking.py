@@ -1,4 +1,4 @@
-"""Cross-process write locks (S5).
+"""cross-process write locks.
 
 One lock file per cache directory — granularity is a single video, so
 concurrent vidlens runs on *different* videos never block each other.

@@ -205,7 +205,7 @@ def fetch_meta(target: Target, cookiefile: str | None,
             return meta
     except Exception as e:
         err = interpret_ytdlp_error("douyin", e)
-        if err.errcode == "content_gone":
+        if err.errcode in ("content_gone", "auth_needed"):
             raise err from e
         # else: fall through to the blocked error below
 
@@ -279,7 +279,10 @@ def _download_with_fallback(item: dict, dest, jar: dict) -> str | None:
 def download(target: Target, meta: dict, cookiefile: str | None, kind: str,
              max_height: int, fresh: bool) -> dict:
     """Download media via the fallback chain. Returns the platform download
-    contract: {path, source_level, retried}."""
+    contract: {path, source_level, retried}. The direct-link chain runs under
+    the per-video write lock (S5 covers this path too, not just yt-dlp)."""
+    from ..locking import cache_write_lock
+
     dest = cache_mod.video_dir("douyin", meta["video_id"]) / "media" / "video.mp4"
     if dest.is_file() and dest.stat().st_size > 1024 and not fresh:
         try:
@@ -290,19 +293,25 @@ def download(target: Target, meta: dict, cookiefile: str | None, kind: str,
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     vid = meta.get("video_id") or target.video_id
-    item = _fetch_item_with_refresh(vid, cookiefile)
-    if item:
-        jar = _cookie_jar(cookiefile)
-        level = _download_with_fallback(item, dest, jar)
-        if level:
-            return {"path": str(dest), "source_level": level, "retried": False}
-        # S2: direct links may be stale — refetch page data once, retry chain
-        item = _fetch_item_with_refresh(vid, cookiefile) or item
-        level = _download_with_fallback(item, dest, jar)
-        if level:
-            return {"path": str(dest), "source_level": level, "retried": True}
+    retried = False
+    with cache_write_lock(dest.parent):
+        item = _fetch_item_with_refresh(vid, cookiefile)
+        if item:
+            jar = _cookie_jar(cookiefile)
+            level = _download_with_fallback(item, dest, jar)
+            if level:
+                return {"path": str(dest), "source_level": level,
+                        "retried": False}
+            # direct links may be stale — refetch page data once, retry chain
+            item = _fetch_item_with_refresh(vid, cookiefile) or item
+            retried = True
+            level = _download_with_fallback(item, dest, jar)
+            if level:
+                return {"path": str(dest), "source_level": level,
+                        "retried": True}
 
-    # last resort: yt-dlp download (works with user cookie sometimes)
+    # last resort: yt-dlp download (works with user cookie sometimes);
+    # keep `retried` truthful about the direct-chain attempt above
     try:
         ff = ffutil.ffmpeg_path()
     except Exception:
@@ -311,6 +320,6 @@ def download(target: Target, meta: dict, cookiefile: str | None, kind: str,
         p = media_mod.download_media(
             meta, kind=kind, cookiefile=cookiefile, max_height=max_height,
             fresh=fresh, ffmpeg_location=ff)
-        return {"path": str(p), "source_level": "ytdlp", "retried": False}
+        return {"path": str(p), "source_level": "ytdlp", "retried": retried}
     except Exception as e:
         raise interpret_ytdlp_error("douyin", e) from e

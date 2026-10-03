@@ -1,5 +1,4 @@
-"""S1+S2: douyin download fallback chain + one-shot retry, tested at the
-`douyin.download()` / `_download_with_fallback()` seam (network mocked)."""
+"""douyin download fallback chain + one-shot retry, tested at the `douyin.download()` / `_download_with_fallback()` seam (network mocked)."""
 
 from vidlens.platforms import douyin
 
@@ -112,6 +111,72 @@ def test_download_returns_dict_shape(monkeypatch, tmp_path):
         None, "video", 1080, fresh=True)
     assert set(out) >= {"path", "source_level", "retried"}
     assert out["path"].endswith("video.mp4")
+
+
+def test_download_wraps_direct_chain_in_lock(monkeypatch, tmp_path):
+    """The direct-link path (not just yt-dlp) must hold the per-video lock."""
+    import contextlib
+
+    seen = []
+
+    @contextlib.contextmanager
+    def fake_lock(d, timeout=300.0):
+        seen.append(str(d))
+        yield
+
+    monkeypatch.setattr("vidlens.locking.cache_write_lock", fake_lock)
+    monkeypatch.setattr(douyin, "_cookie_jar", lambda cf: {})
+    monkeypatch.setattr(douyin, "cache_mod",
+                        type("C", (), {"video_dir": staticmethod(
+                            lambda p, v: tmp_path)})())
+    monkeypatch.setattr(douyin, "_fetch_item", lambda vid, cf: FAKE_ITEM)
+    monkeypatch.setattr(douyin, "_download_url",
+                        lambda url, dest, jar: (_mk(dest), True)[1])
+    out = douyin.download(
+        _T("https://www.douyin.com/video/7607060532303169189"),
+        {"platform": "douyin", "video_id": "7607060532303169189",
+         "webpage_url": "x"},
+        None, "video", 1080, fresh=True)
+    assert out["source_level"] == "no_watermark"
+    assert len(seen) == 1 and seen[0].endswith("media")
+
+
+def test_fetch_meta_reraises_auth_error(monkeypatch):
+    """A dead user cookie must surface as exit-2 AuthNeeded (ADR-0004),
+    not be swallowed into exit-3 Blocked."""
+    import types
+
+    import pytest
+
+    from vidlens.agentio import AuthNeededError
+
+    monkeypatch.setattr(douyin, "_fetch_item_with_refresh",
+                        lambda vid, cf: None)
+    monkeypatch.setattr(douyin, "load_meta", lambda p, v: None)
+    monkeypatch.setattr(douyin, "save_meta", lambda p, v, m: None)
+
+    class FakeDL:
+        def __init__(self, opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def extract_info(self, url, download=False):
+            raise RuntimeError("Fresh cookies (not necessarily logged in) "
+                               "are needed. Login required.")
+
+    fake_mod = types.ModuleType("yt_dlp")
+    fake_mod.YoutubeDL = FakeDL
+    monkeypatch.setattr(douyin, "yt_dlp", fake_mod)
+
+    with pytest.raises(AuthNeededError):
+        douyin.fetch_meta(
+            _T("https://www.douyin.com/video/7607060532303169189"),
+            "user-cookie.txt", fresh=True)
 
 
 class _T:

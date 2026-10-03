@@ -1,4 +1,4 @@
-"""S3: login-state handling per ADR-0004.
+"""login-state handling per ADR-0004.
 
 - stale auto-ttwid is silently re-registered once and the fetch retried
 - real-cookie failures exit 2 with a hint that is an *executable instruction*

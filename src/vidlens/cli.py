@@ -92,8 +92,9 @@ def cmd_subs(ns) -> int:
                 "该视频没有可用字幕(CC)且 --no-asr 已指定",
                 hint="去掉 --no-asr 自动语音转文字,或运行 "
                      "`vidlens transcribe`。", errcode="no_subtitles")
-        audio = mod.download(target, meta, cookiefile, "audio", 1080,
-                             ns.fresh)["path"]
+        audio_dl = mod.download(target, meta, cookiefile, "audio", 1080,
+                                ns.fresh)
+        audio = audio_dl["path"]
         from .asr import get_transcript_cached
         from .lexicon import parse_glossary_arg
         asr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
@@ -113,6 +114,8 @@ def cmd_subs(ns) -> int:
         "model": asr["model"] if asr else None,
         "lang": (track or {}).get("lang") if track else (asr or {}).get("lang"),
         "segments": len(segs),
+        "media_source_level": audio_dl["source_level"] if asr else None,
+        "media_retried": audio_dl["retried"] if asr else None,
         "files": files,
         "primary_file": files.get(fmt) or files.get("srt") or files.get("txt"),
         "out_dir": str(out_dir),
@@ -126,8 +129,9 @@ def cmd_transcribe(ns) -> int:
                                         ns.fresh)
     meta = mod.fetch_meta(target, cookiefile, fresh=ns.fresh)
     out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "asr")
-    audio = mod.download(target, meta, cookiefile, "audio", 1080,
-                         ns.fresh)["path"]
+    audio_dl = mod.download(target, meta, cookiefile, "audio", 1080,
+                            ns.fresh)
+    audio = audio_dl["path"]
     from .asr import get_transcript_cached
     from .lexicon import parse_glossary_arg
     tr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
@@ -146,6 +150,8 @@ def cmd_transcribe(ns) -> int:
         "lang": tr["lang"],
         "duration": tr["duration"],
         "segments": len(tr["segments"]),
+        "media_source_level": audio_dl["source_level"],
+        "media_retried": audio_dl["retried"],
         "files": files,
         "primary_file": files.get(ns.format) or files.get("txt"),
         "out_dir": str(out_dir),
