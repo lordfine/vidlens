@@ -1,9 +1,11 @@
-"""SenseVoice via sherpa-onnx. Model auto-downloads on first use (~230MB)."""
+"""通过 sherpa-onnx 调用 SenseVoice；首次下载约 160 MB，解压后约 230 MB。"""
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
+import sys
 import tarfile
 from pathlib import Path
 
@@ -13,7 +15,7 @@ from . import prepare_wav, split_wav
 
 MODEL_DIRNAME = "sensevoice"
 MODEL_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
-             "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2")
+             "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2")
 
 _SENT_END = "。！？；!?\n"
 _SENT_SOFT = "，,、"
@@ -115,8 +117,40 @@ def ensure_model() -> Path:
                 shutil.rmtree(staging, ignore_errors=True)
 
 
+_DLL_DIRECTORY_HANDLES = []
+_DLL_DIRECTORIES = set()
+_DLL_RUNTIME_HANDLES = []
+
+
+def _register_sherpa_dll_directory() -> None:
+    """Windows 优先使用 sherpa-onnx wheel 自带的 ONNX Runtime。"""
+    if sys.platform != "win32":
+        return
+    from importlib.util import find_spec
+
+    spec = find_spec("sherpa_onnx")
+    if not spec or not spec.origin:
+        return
+    dll_dir = Path(spec.origin).parent / "lib"
+    if not dll_dir.is_dir():
+        return
+    resolved = str(dll_dir.resolve())
+    if resolved not in _DLL_DIRECTORIES:
+        # 保留句柄，避免目录搜索路径被提前移除。
+        _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(resolved))
+        runtime = dll_dir / "onnxruntime.dll"
+        if runtime.is_file():
+            import ctypes
+
+            # 用绝对路径预加载 wheel 内的运行库，避免 Windows 选中旧系统副本。
+            _DLL_RUNTIME_HANDLES.append(
+                ctypes.WinDLL(str(runtime.resolve()), winmode=0x00000008))
+        _DLL_DIRECTORIES.add(resolved)
+
+
 def _import_sherpa():
     """Import sherpa-onnx and use the runtime bundled with its wheel."""
+    _register_sherpa_dll_directory()
     import sherpa_onnx
 
     return sherpa_onnx

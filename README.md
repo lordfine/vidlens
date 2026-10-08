@@ -75,7 +75,7 @@ vidlens doctor
 uv tool upgrade vidlens
 ```
 
-首次本地语音识别会下载约 230 MB 的 SenseVoice 模型。之后模型复用本机缓存。
+首次本地语音识别需下载约 160 MB；解压后的 SenseVoice 模型缓存占用约 230 MB。之后会复用本机缓存。
 
 ### 开发安装
 
@@ -133,7 +133,7 @@ CI 在 Windows/Linux 上运行 Python 3.11 与 3.14 检查；macOS Intel 与 App
 - stdout 输出 JSON，错误写入 stderr；错误对象包含可执行的 `hint`。
 - 媒体缓存共享，ASR 转写缓存共享；每次调用的产物目录彼此独立。
 - 模型首次下载会串行化，避免并发任务写坏模型文件。
-- Windows 转写崩溃时先升级或重装 vidlens。程序使用 `sherpa-onnx` 随包运行时，不需要替换系统 DLL。
+- Windows 首次本地转写若出现 `python.exe - 应用程序错误`，请从[微软官方页面](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170)安装或修复最新版 Visual C++ v14 x64 运行库，再重试原命令；不要删除或覆盖 `System32` 中的 DLL。
 - 抖音风控时可提供 `--cookie`；不要把 cookie 提交到 issue 或公开日志。
 
 ## 开发与校验
