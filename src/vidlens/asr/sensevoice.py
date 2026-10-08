@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import tarfile
 from pathlib import Path
 
@@ -55,101 +56,69 @@ def model_ready() -> bool:
 
 def ensure_model() -> Path:
     d = _model_dir()
-    if model_ready():
-        return d
-    d.mkdir(parents=True, exist_ok=True)
-    import httpx
-    archive = d / "model.tar.bz2"
-    try:
-        with httpx.Client(follow_redirects=True, timeout=600) as c:
-            with c.stream("GET", MODEL_URL) as resp:
-                resp.raise_for_status()
-                total = int(resp.headers.get("content-length", 0))
-                done = 0
-                with open(archive, "wb") as f:
-                    for chunk in resp.iter_bytes(1 << 20):
-                        f.write(chunk)
-                        done += len(chunk)
-                if total and done < total:
-                    raise OSError(f"download truncated {done}/{total}")
-    except Exception as e:
-        archive.unlink(missing_ok=True)
-        raise BlockedError(
-            f"SenseVoice 模型下载失败: {e}",
-            hint="检查网络(需访问 github.com);或手动下载 "
-                 f"{MODEL_URL} 解压后把 model.int8.onnx 和 tokens.txt 放到 "
-                 f"{d}。") from e
-    try:
-        with tarfile.open(archive, "r:bz2") as tf:
-            members = [m for m in tf.getmembers()
-                       if Path(m.name).name in ("model.int8.onnx", "tokens.txt")]
-            for m in members:
-                m.name = Path(m.name).name
-                tf.extract(m, d)
-    except Exception as e:
-        raise DependencyError(
-            f"模型包解压失败: {e}",
-            hint=f"手动解压 {archive} 并将 model.int8.onnx/tokens.txt 放入 {d}。"
-        ) from e
-    finally:
-        archive.unlink(missing_ok=True)
-    if not model_ready():
-        raise DependencyError("模型文件不完整",
-                              hint=f"期望 {d}/model.int8.onnx 与 tokens.txt。")
-    return d
+    from ..locking import cache_write_lock
+    with cache_write_lock(d, timeout=1200.0):
+        if model_ready():
+            return d
+        import httpx
 
-
-def ensure_ort_dll() -> None:
-    """Make sure sherpa-onnx resolves the venv's onnxruntime.dll on Windows.
-
-    Some machines carry a stale onnxruntime.dll in System32 (found before
-    site-packages in the default DLL search order), which crashes sherpa-onnx
-    with an ORT API-version mismatch. Copying our wheel's DLL next to
-    python.exe (first directory searched) sidesteps it.
-    """
-    import sys
-    if sys.platform != "win32":
-        return
-    try:
-        import sysconfig
-        from pathlib import Path
-
-        import onnxruntime
-        capi = Path(onnxruntime.__file__).parent / "capi"
-        src = capi / "onnxruntime.dll"
-        if not src.is_file():
-            return
-        dests = [Path(sysconfig.get_paths()["scripts"]) / "onnxruntime.dll"]
-        # locate sherpa's lib dir WITHOUT importing it (importing would load
-        # the stale DLL before our copies are in place)
+        staging = d / ".staging"
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True)
+        archive = staging / "model.tar.bz2"
         try:
-            import importlib.util
-            spec = importlib.util.find_spec("sherpa_onnx")
-            if spec and spec.submodule_search_locations:
-                dests.append(Path(spec.submodule_search_locations[0]) /
-                             "lib" / "onnxruntime.dll")
-        except Exception:
-            pass
-        for dst in dests:
             try:
-                if not dst.is_file() or dst.stat().st_size != src.stat().st_size:
-                    import shutil
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src, dst)
-            except OSError:
-                pass
-    except Exception:
-        pass
+                with httpx.Client(follow_redirects=True, timeout=600) as c:
+                    with c.stream("GET", MODEL_URL) as resp:
+                        resp.raise_for_status()
+                        total = int(resp.headers.get("content-length", 0))
+                        done = 0
+                        with open(archive, "wb") as f:
+                            for chunk in resp.iter_bytes(1 << 20):
+                                f.write(chunk)
+                                done += len(chunk)
+                        if total and done < total:
+                            raise OSError(f"download truncated {done}/{total}")
+            except Exception as e:
+                raise BlockedError(
+                    f"SenseVoice 模型下载失败: {e}",
+                    hint="检查网络(需访问 github.com);或手动下载 "
+                         f"{MODEL_URL} 解压后把 model.int8.onnx 和 tokens.txt 放到 "
+                         f"{d}。") from e
+
+            required = {"model.int8.onnx", "tokens.txt"}
+            try:
+                with tarfile.open(archive, "r:bz2") as tf:
+                    members = [m for m in tf.getmembers()
+                               if Path(m.name).name in required and m.isfile()]
+                    found = {Path(m.name).name for m in members}
+                    if found != required:
+                        raise ValueError("模型归档缺少必需文件")
+                    for member in members:
+                        member.name = Path(member.name).name
+                        tf.extract(member, staging)
+            except Exception as e:
+                raise DependencyError(
+                    f"模型包解压失败: {e}",
+                    hint=f"检查模型包后重试;缓存位置: {d}。"
+                ) from e
+
+            for filename in required:
+                (staging / filename).replace(d / filename)
+            if not model_ready():
+                raise DependencyError("模型文件不完整",
+                                      hint=f"期望 {d}/model.int8.onnx 与 tokens.txt。")
+            return d
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
 
 
 def _import_sherpa():
-    """Import sherpa_onnx with a correct onnxruntime available (Windows)."""
-    ensure_ort_dll()
-    try:
-        import onnxruntime  # noqa: F401  (preload correct ORT, belt & braces)
-    except Exception:
-        pass
+    """Import sherpa-onnx and use the runtime bundled with its wheel."""
     import sherpa_onnx
+
     return sherpa_onnx
 
 

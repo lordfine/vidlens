@@ -4,9 +4,25 @@ vidlens 把抖音 / B站视频变成 agent 可读的素材,供 Claude Code、Cod
 
 ## Language
 
+**运行平台 (Execution Platform)**:
+vidlens 命令运行所在的操作系统与 CPU 架构,如 Windows x86_64、macOS Intel、macOS Apple Silicon 或 Linux;与抖音/B站等视频内容平台区分。
+_Avoid_: 平台(未说明是运行环境还是视频内容来源时)
+
 **Bundle(素材包)**:
 `prepare` 命令的完整产物集合——转写文本、帧图、拼图、manifest 与 context.md 的总和。
 _Avoid_: context pack、context bundle、素材导读(导读只是其中一份文件)
+
+**多模态证据 (Multimodal Evidence)**:
+从视频提取、带视频时间戳并供 agent 引用的语音、字幕、画面内容与画面文字等信息;vidlens 负责准备证据,综合结论由调用方 agent 产出。
+_Avoid_: 综合解读(由 agent 基于证据生成)
+
+**证据时间线 (Evidence Timeline)**:
+按视频时间排序、引用字幕/转写片段与帧图文件的索引;原视频与音频作为素材引用,时间单位为视频秒数。
+_Avoid_: 分析结论(时间线只列证据,不替 agent 解读)
+
+**自适应帧预算 (Adaptive Frame Budget)**:
+用全片画面变化调整交付给 agent 的帧数,默认基准 30 帧,常规上限 75 帧,至少保留 10 帧作全片覆盖;超过 100 帧须用户明确允许。
+_Avoid_: 固定帧率(可能只覆盖长视频开头并输出重复帧)
 
 **Agent 契约(Agent Contract)**:
 vidlens 对调用方的完整承诺:stdout 恒为 JSON、五档退出码(0/1/2/3/4)、错误必带 hint、产物给绝对路径、绝不交互式提问。

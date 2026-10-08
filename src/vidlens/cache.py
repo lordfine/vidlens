@@ -13,7 +13,9 @@ LRU policy: `clean` trims oldest-accessed *media* dirs first, then jobs.
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -24,8 +26,14 @@ def base_dir() -> Path:
     env = os.environ.get("vidlens_CACHE")
     if env:
         return Path(env)
-    local = os.environ.get("LOCALAPPDATA")
-    root = Path(local) if local else Path.home() / ".local" / "share"
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+        root = Path(local) if local else Path.home() / "AppData" / "Local"
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library" / "Application Support"
+    else:
+        xdg = Path(os.environ.get("XDG_DATA_HOME", ""))
+        root = xdg if xdg.is_absolute() else Path.home() / ".local" / "share"
     return root / "vidlens"
 
 
@@ -55,9 +63,10 @@ def video_dir(platform: str, video_id: str) -> Path:
 
 
 def job_dir(platform: str, video_id: str, label: str) -> Path:
-    """Fresh timestamped output dir: cache/<pf>/<id>/jobs/<label>-<stamp>."""
+    """Create an invocation-unique output dir for concurrent CLI runs."""
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    root = video_dir(platform, video_id) / "jobs" / f"{label}-{stamp}"
+    suffix = secrets.token_hex(4)
+    root = video_dir(platform, video_id) / "jobs" / f"{label}-{stamp}-{suffix}"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

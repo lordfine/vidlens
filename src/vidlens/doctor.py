@@ -39,7 +39,7 @@ def run_checks() -> dict:
     except Exception as e:
         checks.append({"name": "yt-dlp", "ok": False, "detail": str(e)})
 
-    # sherpa-onnx + model (preload onnxruntime to dodge stale System32 dll)
+    # sherpa-onnx bundles the native runtime it was built against.
     try:
         from .asr.sensevoice import _import_sherpa
         _import_sherpa()

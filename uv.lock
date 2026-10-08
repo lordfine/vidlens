@@ -819,7 +819,6 @@ source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "imageio-ffmpeg" },
-    { name = "onnxruntime" },
     { name = "pillow" },
     { name = "sherpa-onnx" },
     { name = "yt-dlp" },
@@ -841,7 +840,6 @@ requires-dist = [
     { name = "faster-whisper", marker = "extra == 'whisper'", specifier = ">=1.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "imageio-ffmpeg", specifier = ">=0.5" },
-    { name = "onnxruntime", specifier = ">=1.30.0" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "sherpa-onnx", specifier = ">=1.10.30" },
     { name = "yt-dlp", specifier = ">=2025.6.9" },

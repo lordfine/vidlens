@@ -10,7 +10,6 @@ dependencies = [
     "imageio-ffmpeg>=0.5",
     "pillow>=10.0",
     "sherpa-onnx>=1.10.30",
-    "onnxruntime>=1.30.0",
 ]
 
 [project.optional-dependencies]

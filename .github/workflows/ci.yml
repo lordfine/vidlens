@@ -10,6 +10,7 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
+        python: ["3.11", "3.14"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -17,8 +18,38 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
       - name: Sync dependencies
-        run: uv sync --group dev
+        run: uv sync --python ${{ matrix.python }} --group dev
+      - name: Lint
+        run: uv run ruff check src tests
+      - name: Unit tests
+        run: uv run pytest -q
+
+  macos:
+    # Informational during the cross-platform rollout; never blocks required CI.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15-intel, macos-15]
+        python: ["3.11", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Sync dependencies
+        run: uv sync --python ${{ matrix.python }} --group dev
       - name: Lint
         run: uv run ruff check src tests
       - name: Unit tests

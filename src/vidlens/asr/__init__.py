@@ -8,6 +8,7 @@ get_transcript(media_path) -> {
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from .. import cache as cache_mod
@@ -38,17 +39,22 @@ def get_transcript_cached(platform: str, video_id: str, media_path: str, *,
     if glossary:
         key += f"-{glossary_hash(glossary)}"
     cf = cache_mod.video_dir(platform, video_id) / f"{key}.json"
-    if cf.is_file() and not fresh:
+    from ..locking import cache_write_lock
+    with cache_write_lock(cf.parent, timeout=7200.0):
+        if cf.is_file() and not fresh:
+            try:
+                return _json.loads(cf.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        tr = get_transcript(media_path, lang=lang, model=model,
+                            glossary=glossary)
+        temp = cf.with_name(f".{cf.name}.{os.getpid()}.tmp")
         try:
-            return _json.loads(cf.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    tr = get_transcript(media_path, lang=lang, model=model, glossary=glossary)
-    try:
-        cf.write_text(_json.dumps(tr, ensure_ascii=False), encoding="utf-8")
-    except OSError:
-        pass
-    return tr
+            temp.write_text(_json.dumps(tr, ensure_ascii=False), encoding="utf-8")
+            temp.replace(cf)
+        except OSError:
+            temp.unlink(missing_ok=True)
+        return tr
 
 
 def prepare_wav(media_path: str, *, fresh: bool = False) -> tuple[str, float]:

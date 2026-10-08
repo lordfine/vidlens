@@ -18,18 +18,18 @@ from .platforms import media as media_mod
 
 GRANULARITY = {
     "coarse": {
-        "frames": {"mode": "count", "count": 8, "size": 960},
-        "scene_pass": False, "contact": True,
+        "frames": {"mode": "adaptive", "count": 10, "size": 960},
+        "contact": True,
         "sub_formats": ("txt", "srt"), "max_height": 720,
     },
     "medium": {
-        "frames": {"mode": "count", "count": 16, "size": 1280},
-        "scene_pass": False, "contact": True,
+        "frames": {"mode": "adaptive", "count": 30, "size": 1280},
+        "contact": True,
         "sub_formats": ("srt", "txt", "json"), "max_height": 1080,
     },
     "fine": {
-        "frames": {"mode": "fps", "fps": 0.5, "size": 1280},
-        "scene_pass": True, "contact": False,
+        "frames": {"mode": "adaptive", "count": 75, "size": 1280},
+        "contact": False,
         "sub_formats": ("srt", "json"), "max_height": 1080,
     },
 }
@@ -48,10 +48,12 @@ def build(target, mod, meta, *, granularity: str = "medium",
           cookiefile: str | None = None, out_dir: Path | None = None,
           fresh: bool = False, asr_model: str = "sensevoice",
           asr_lang: str = "auto",
-          glossary: dict[str, str] | None = None) -> dict:
+          glossary: dict[str, str] | None = None,
+          max_frames: int | None = None,
+          allow_over_100_frames: bool = False) -> dict:
     g = GRANULARITY[granularity]
-    vdir = cache_mod.video_dir(meta["platform"], meta["video_id"])
-    jdir = out_dir or (vdir / "jobs" / f"prepare-{time.strftime('%Y%m%d-%H%M%S')}")
+    jdir = out_dir or cache_mod.job_dir(meta["platform"], meta["video_id"],
+                                        "prepare")
     jdir = Path(jdir)
     jdir.mkdir(parents=True, exist_ok=True)
     (jdir / "frames").mkdir(exist_ok=True)
@@ -83,10 +85,11 @@ def build(target, mod, meta, *, granularity: str = "medium",
     if segs:
         sub_source = "cc"
         sub_files = media_mod.save_subtitle(segs, jdir, base="subtitle")
-    elif not no_asr:
-        audio = mod.download(target, meta, cookiefile, "audio", 1080,
-                             fresh)["path"]
-        tr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
+    # Keep the original audio available to the calling agent even when CC exists.
+    audio = mod.download(target, meta, cookiefile, "audio", 1080, fresh)
+    if not segs and not no_asr:
+        tr = get_transcript_cached(meta["platform"], meta["video_id"],
+                                   audio["path"],
                                    lang=asr_lang or "auto", model=asr_model,
                                    fresh=fresh, glossary=glossary)
         segs = tr["segments"]
@@ -115,33 +118,57 @@ def build(target, mod, meta, *, granularity: str = "medium",
         fps=fparams.get("fps", 1.0), count=fparams.get("count", 12),
         threshold=fparams.get("threshold", 0.3),
         size=fparams.get("size"), fmt=fparams.get("fmt", "jpg"),
-        duration=meta.get("duration"))
+        duration=meta.get("duration"), max_frames=max_frames,
+        allow_over_100=allow_over_100_frames)
     recs = frame_result.records
     scene_recs = []
     scene_truncated = False
-    if g["scene_pass"]:
-        try:
-            scene_result = frames_mod.extract(
-                video["path"], jdir / "frames_scene", mode="scene",
-                size=fparams.get("size"), duration=meta.get("duration"))
-            scene_recs = scene_result.records
-            scene_truncated = scene_result.truncated
-        except VidlensError:
-            scene_recs = []
     manifest["frames"] = {"params": fparams, "files": recs,
                           "truncated": frame_result.truncated,
                           "total_candidates": frame_result.total_candidates,
                           "scene_files": scene_recs,
-                          "scene_truncated": scene_truncated}
+                          "scene_truncated": scene_truncated,
+                          "budget": {
+                              "minimum": frames_mod.MIN_ADAPTIVE_FRAMES,
+                              "baseline": fparams.get("count", 30),
+                              "normal_max": frames_mod.MAX_FRAMES,
+                              "automatic_max": frames_mod.MAX_AUTO_FRAMES,
+                              "limit": frames_mod.effective_limit(
+                                  fparams["mode"], fparams.get("count", 30),
+                                  max_frames, allow_over_100_frames),
+                              "selected": len(recs),
+                              "target": frame_result.total_candidates,
+                              "truncated": frame_result.truncated,
+                          }}
     cs_path = None
     if g["contact"] and recs:
         cs = jdir / "contact_sheet.jpg"
         cs_path = frames_mod.contact_sheet(recs, cs)
         manifest["contact_sheet"] = cs_path
     manifest["files"]["video_local"] = video["path"]
-    manifest["media"] = {"source_level": video["source_level"],
-                         "retried": video["retried"]}
+    manifest["files"]["audio_local"] = audio["path"]
+    manifest["media"] = {
+        # Preserve the original flat fields for existing consumers.
+        "source_level": video["source_level"],
+        "retried": video["retried"],
+        "video": {"source_level": video["source_level"],
+                  "retried": video["retried"]},
+        "audio": {"source_level": audio["source_level"],
+                  "retried": audio["retried"]},
+        "cache_lifetime": "有效到用户清理对应缓存",
+    }
     manifest["files"]["frames_dir"] = str(jdir / "frames")
+
+    timeline = _build_timeline(segs, recs, sub_source, manifest["files"],
+                               video["path"], audio["path"],
+                               meta.get("duration"))
+    timeline_path = jdir / "evidence-timeline.json"
+    timeline_path.write_text(json.dumps(timeline, ensure_ascii=False, indent=1),
+                              encoding="utf-8")
+    manifest["timeline"] = {"timebase": "video_seconds",
+                            "events": len(timeline["events"]),
+                            "file": str(timeline_path)}
+    manifest["files"]["evidence_timeline"] = str(timeline_path)
 
     # ---- 3. context.md ----
     cmd = _context_md(manifest, segs, recs, scene_recs, cs_path)
@@ -161,6 +188,43 @@ def build(target, mod, meta, *, granularity: str = "medium",
 def _md_path(p) -> str:
     """Markdown-safe absolute path (forward slashes)."""
     return str(p).replace("\\", "/")
+
+
+def _build_timeline(segs: list[dict], recs: list[dict], source: str | None,
+                    files: dict, video_path: str, audio_path: str,
+                    duration: float | None) -> dict:
+    events = []
+    text_path = files.get("json") or files.get("srt")
+    for index, seg in enumerate(segs):
+        events.append({
+            "start": round(float(seg.get("start", 0)), 3),
+            "end": round(float(seg.get("end", 0)), 3),
+            "kind": "caption" if source == "cc" else "speech",
+            "source": source,
+            "text": seg.get("text", ""),
+            "reference": text_path,
+            "segment_index": index,
+        })
+    for rec in recs:
+        timestamp = float(rec.get("t") or 0)
+        events.append({
+            "start": timestamp,
+            "end": timestamp,
+            "kind": "frame",
+            "source": "video",
+            "reference": rec["file"],
+            "selection_reason": rec.get("selection_reason"),
+        })
+    events.sort(key=lambda event: (event["start"],
+                                  0 if event["kind"] != "frame" else 1,
+                                  event.get("end", 0)))
+    return {
+        "version": 1,
+        "timebase": "video_seconds",
+        "duration": duration,
+        "assets": {"video": video_path, "audio": audio_path},
+        "events": events,
+    }
 
 
 def _frame_index(recs: list[dict], per_line: int = 4) -> str:
@@ -195,13 +259,13 @@ def _context_md(manifest: dict, segs: list[dict], recs: list[dict],
 
     lines += [
         "## 怎么用这份素材(agent)",
-        "1. **先看拼图**(如有)把握整体画面与场景节奏。",
-        "2. **读下面的「语音内容」段落**——`[分:秒]` 是段落起点锚点,按段阅读;",
-        "   需要精确到句的时间轴用 `transcript.srt` / `.json`。",
-        "3. **看某时刻的画面**:按「关键帧索引」的时间就近取帧,图片文件在 "
-        "`frames/` 目录(manifest 有绝对路径),直接按图片读取。",
-        "4. **总结/分析是你的工作**,本工具只负责素材:字幕定位内容,帧补充画面,"
-        "两者时间对齐即可描述\"这时画面上是什么、说了什么\"。",
+        "1. 先读 manifest 中的 `timeline.file`,按时间对齐语音/字幕与帧图。",
+        "2. 原视频和原音频位于 manifest 的 `files.video_local` / `files.audio_local`;"
+        "路径在用户清理缓存前有效。",
+        "3. 帧图为全片自适应抽样;需要查看局部细节时,调用 `vidlens frames` "
+        "并用 `--start` / `--end` 按视频秒数补帧。",
+        "4. 画面含义、画面文字与音乐/音效由你读取原媒体后分析;"
+        "vidlens 只提供带时间戳证据,综合结论由你完成。",
         "",
     ]
 

@@ -6,6 +6,14 @@ import argparse
 import sys
 from pathlib import Path
 
+# Native runtimes can terminate the process with an access violation. Keep
+# Windows from opening a modal system error dialog for CLI invocations.
+if sys.platform == "win32":
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.SetErrorMode(kernel32.GetErrorMode() | 0x0002)  # SEM_NOGPFAULTERRORBOX
+
 from . import __version__, urls
 from . import cache as cache_mod
 from . import doctor as doctor_mod
@@ -161,16 +169,26 @@ def cmd_transcribe(ns) -> int:
 
 
 def cmd_frames(ns) -> int:
+    frame_count = (ns.count if ns.count is not None else
+                   (frames_mod.DEFAULT_ADAPTIVE_FRAMES
+                    if ns.mode == "adaptive" else 12))
+    frames_mod.validate_budget(
+        frame_count, ns.max_frames, ns.allow_over_100_frames,
+        uses_count=ns.mode in ("adaptive", "count"))
     target, mod, cookiefile = _prep_url(ns.url, ns.cookie, ns.cookie_file,
                                         ns.fresh)
     meta = mod.fetch_meta(target, cookiefile, fresh=ns.fresh)
     out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "frames")
     video = mod.download(target, meta, cookiefile, "video", ns.max_height,
                          ns.fresh)
+    frame_limit = frames_mod.effective_limit(
+        ns.mode, frame_count, ns.max_frames, ns.allow_over_100_frames)
     res = frames_mod.extract(
-        video["path"], out_dir, mode=ns.mode, fps=ns.fps, count=ns.count,
+        video["path"], out_dir, mode=ns.mode, fps=ns.fps, count=frame_count,
         threshold=ns.threshold, size=ns.size, fmt=ns.format,
-        duration=meta.get("duration"))
+        duration=meta.get("duration"), max_frames=ns.max_frames,
+        allow_over_100=ns.allow_over_100_frames,
+        start=ns.start, end=ns.end)
     recs = res.records
     cs = None
     if ns.contact_sheet:
@@ -179,8 +197,8 @@ def cmd_frames(ns) -> int:
             "时间戳在 t 字段(秒)。")
     if res.truncated:
         hint = (f"警告: 候选帧共 {res.total_candidates} 张,超出上限 "
-                f"{frames_mod.MAX_FRAMES} 已截断;需要更细颗粒度请提高 "
-                "--fps 或分时间段多次拆帧。" + hint)
+                f"{frame_limit} 已截断;需要更细 "
+                "请用 --mode count --start / --end 按时间段补帧。" + hint)
     emit({
         "mode": ns.mode,
         "count": len(recs),
@@ -191,6 +209,11 @@ def cmd_frames(ns) -> int:
         "media_retried": video["retried"],
         "frames": recs,
         "contact_sheet": cs,
+        "time_range": ({"start": ns.start, "end": ns.end}
+                       if ns.start is not None else None),
+        "frame_budget": {"selected": len(recs),
+                         "limit": frame_limit,
+                         "requires_user_approval_above": 100},
         "out_dir": str(out_dir),
         "hint": hint,
     }, pretty=ns.pretty)
@@ -198,6 +221,13 @@ def cmd_frames(ns) -> int:
 
 
 def cmd_prepare(ns) -> int:
+    preset = prepare_mod.GRANULARITY[ns.granularity]["frames"]
+    frame_mode = ns.frames_mode or preset["mode"]
+    frame_count = (ns.frames_count if ns.frames_count is not None else
+                   preset.get("count", frames_mod.DEFAULT_ADAPTIVE_FRAMES))
+    frames_mod.validate_budget(
+        frame_count, ns.max_frames, ns.allow_over_100_frames,
+        uses_count=frame_mode in ("adaptive", "count"))
     target, mod, cookiefile = _prep_url(ns.url, ns.cookie, ns.cookie_file,
                                         ns.fresh)
     meta = mod.fetch_meta(target, cookiefile, fresh=ns.fresh)
@@ -209,13 +239,16 @@ def cmd_prepare(ns) -> int:
         target, mod, meta, granularity=ns.granularity,
         frames_overrides=overrides, no_asr=ns.no_asr, cookiefile=cookiefile,
         out_dir=out, fresh=ns.fresh, asr_model=ns.asr_model,
-        asr_lang=ns.lang, glossary=parse_glossary_arg(ns.glossary))
+        asr_lang=ns.lang, glossary=parse_glossary_arg(ns.glossary),
+        max_frames=ns.max_frames,
+        allow_over_100_frames=ns.allow_over_100_frames)
     emit({
         "granularity": m["granularity"],
         "video": m["video"],
         "subtitle": m["subtitle"],
         "frames_count": len(m["frames"]["files"]) if m["frames"] else 0,
         "scene_frames_count": len(m["frames"]["scene_files"]) if m["frames"] else 0,
+        "timeline": m.get("timeline"),
         "files": m["files"],
         "hint": "先读 context.md(给 agent 的素材导读);帧图片可直接按图片读取;"
                 "总结/分析由 agent 完成。",
@@ -289,11 +322,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="术语表:'误写=标准词;误写2=标准词2' 内联,或 JSON 文件路径")
     sp.set_defaults(fn=cmd_transcribe)
 
-    sp = sub.add_parser("frames", help="拆帧(count/fps/scene/keyframe)")
+    sp = sub.add_parser("frames", help="拆帧(adaptive/count/fps/scene/keyframe)")
     common(sp)
     sp.add_argument("--mode", default="count",
-                    choices=["count", "fps", "scene", "keyframe"])
-    sp.add_argument("--count", type=int, default=12, help="count 模式帧数")
+                    choices=["adaptive", "count", "fps", "scene", "keyframe"])
+    sp.add_argument("--count", type=int, default=None,
+                    help="取帧基准;自适应模式默认 30,count 模式默认 12")
     sp.add_argument("--fps", type=float, default=1.0,
                     help="fps 模式:每秒帧数(0.5=每2秒一帧)")
     sp.add_argument("--threshold", type=float, default=0.3,
@@ -302,6 +336,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--format", default="jpg", choices=["jpg", "png"])
     sp.add_argument("--max-height", type=int, default=1080,
                     help="下载视频最高清晰度")
+    sp.add_argument("--start", type=float, default=None,
+                    help="count 模式补帧起始时间(视频秒数)")
+    sp.add_argument("--end", type=float, default=None,
+                    help="count 模式补帧结束时间(视频秒数)")
+    sp.add_argument("--max-frames", type=int, default=None,
+                    help="总帧数上限;超过 100 需同时显式允许")
+    sp.add_argument("--allow-over-100-frames", action="store_true",
+                    help="仅在用户已明确允许超过 100 帧后使用")
     sp.add_argument("--contact-sheet", action="store_true", help="额外输出拼图")
     sp.set_defaults(fn=cmd_frames)
 
@@ -310,10 +352,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--granularity", default="medium",
                     choices=["coarse", "medium", "fine"])
     sp.add_argument("--frames-mode", default=None,
-                    choices=["count", "fps", "scene", "keyframe"])
+                    choices=["adaptive", "count", "fps", "scene", "keyframe"])
     sp.add_argument("--frames-count", type=int, default=None)
     sp.add_argument("--frames-fps", type=float, default=None)
     sp.add_argument("--frames-size", type=int, default=None)
+    sp.add_argument("--max-frames", type=int, default=None,
+                    help="自适应取帧硬上限;超过 100 需同时显式允许")
+    sp.add_argument("--allow-over-100-frames", action="store_true",
+                    help="仅在用户已明确允许超过 100 帧后使用")
     sp.add_argument("--lang", default="auto")
     sp.add_argument("--no-asr", action="store_true")
     sp.add_argument("--asr-model", default="sensevoice")

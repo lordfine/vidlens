@@ -20,12 +20,12 @@ from .agentio import DependencyError
 def ffmpeg_path() -> str:
     env = os.environ.get("vidlens_FFMPEG")
     if env:
-        p = env if env.endswith(".exe") else os.path.join(env, "ffmpeg.exe")
-        if os.path.isfile(p):
-            return p
-        p = env if os.path.basename(env).startswith("ffmpeg") else p
-        if os.path.isfile(p):
-            return p
+        candidate = os.path.expanduser(env)
+        if os.path.isdir(candidate):
+            executable = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+            candidate = os.path.join(candidate, executable)
+        if os.path.isfile(candidate):
+            return candidate
     found = shutil.which("ffmpeg")
     if found:
         return found
