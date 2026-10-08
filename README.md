@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/vidlens-hero.png" alt="vidlens 将视频整理成按时间对齐的画面、字幕与音频证据" width="100%">
+<img src="docs/assets/分享预览.png" alt="vidlens · 视频透镜：让 Agent 看懂整段视频" width="100%">
 
 # vidlens · 视频透镜
 

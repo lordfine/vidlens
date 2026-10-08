@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#173246" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="640" fill="#071925"/>
+  <rect width="1280" height="640" fill="url(#grid)" opacity=".36"/>
+  <rect x="0" y="0" width="8" height="640" fill="#38C8D5"/>
+  <g transform="translate(58 48) scale(.14)">
+    <rect width="512" height="512" rx="112" fill="#071925"/>
+    <rect x="70" y="68" width="372" height="270" rx="42" fill="#0C2638" stroke="#1B4559" stroke-width="12"/>
+    <path d="M256 111 329 153v84l-73 42-73-42v-84z" fill="none" stroke="#5EDCE3" stroke-width="17" stroke-linejoin="round"/>
+    <circle cx="256" cy="195" r="24" fill="#F4F2E9"/>
+    <circle cx="256" cy="195" r="9" fill="#FF795E"/>
+    <path d="M256 339v31M83 399h346" fill="none" stroke="#5EDCE3" stroke-width="13" stroke-linecap="round"/>
+    <path d="M112 382v35m58-22v22m58-35v35m58-22v22m58-35v35m58-22v22" fill="none" stroke="#5EDCE3" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="286" cy="399" r="19" fill="#FF795E" stroke="#071925" stroke-width="8"/>
+  </g>
+  <text x="148" y="92" fill="#EAF4F4" font-family="Arial, Microsoft YaHei, Segoe UI, sans-serif" font-size="36" font-weight="700" letter-spacing=".4">vidlens</text>
+  <text x="149" y="119" fill="#7FA6B4" font-family="Microsoft YaHei, Arial, Segoe UI, sans-serif" font-size="13" letter-spacing="2.5">视频透镜 · MULTIMODAL VIDEO EVIDENCE</text>
+  <text x="62" y="204" fill="#F4F2E9" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="43" font-weight="700">让 Agent 看懂整段视频</text>
+  <text x="64" y="244" fill="#A8C1C8" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="20">画面、语音、字幕与时间戳，整理成可引用的多模态证据。</text>
+  <g font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="600">
+    <rect x="64" y="275" width="82" height="36" rx="18" fill="#102B3D" stroke="#2B6474"/>
+    <text x="105" y="299" fill="#8EE6E9" text-anchor="middle">帧图</text>
+    <rect x="156" y="275" width="82" height="36" rx="18" fill="#102B3D" stroke="#2B6474"/>
+    <text x="197" y="299" fill="#8EE6E9" text-anchor="middle">语音</text>
+    <rect x="248" y="275" width="82" height="36" rx="18" fill="#102B3D" stroke="#2B6474"/>
+    <text x="289" y="299" fill="#8EE6E9" text-anchor="middle">字幕</text>
+    <rect x="340" y="275" width="130" height="36" rx="18" fill="#102B3D" stroke="#2B6474"/>
+    <text x="405" y="299" fill="#8EE6E9" text-anchor="middle">证据时间线</text>
+  </g>
+  <path d="M64 348H552" stroke="#1D3D4F" stroke-width="2"/>
+  <text x="65" y="383" fill="#7FA6B4" font-family="Arial, Microsoft YaHei, sans-serif" font-size="13" letter-spacing="2">ADAPTIVE FRAME BUDGET</text>
+  <text x="65" y="427" fill="#EAF4F4" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="17" font-weight="600">全片覆盖 · 按画面变化调节采样密度</text>
+  <g transform="translate(66 452)">
+    <rect width="86" height="10" rx="5" fill="#38C8D5"/>
+    <rect x="92" width="118" height="10" rx="5" fill="#287F93"/>
+    <rect x="216" width="160" height="10" rx="5" fill="#FF795E"/>
+    <rect x="382" width="90" height="10" rx="5" fill="#743E43"/>
+    <text x="0" y="34" fill="#86A6B2" font-family="Arial, Microsoft YaHei, sans-serif" font-size="13">10</text>
+    <text x="119" y="34" fill="#86A6B2" font-family="Arial, Microsoft YaHei, sans-serif" font-size="13">30</text>
+    <text x="283" y="34" fill="#86A6B2" font-family="Arial, Microsoft YaHei, sans-serif" font-size="13">75</text>
+    <text x="451" y="34" fill="#86A6B2" font-family="Arial, Microsoft YaHei, sans-serif" font-size="13">100+</text>
+  </g>
+  <text x="66" y="521" fill="#849FAB" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="13">超过 100 帧需用户明确允许</text>
+  <rect x="614" y="50" width="610" height="540" rx="24" fill="#0A2131" stroke="#1B4357" stroke-width="2"/>
+  <text x="648" y="88" fill="#8EE6E9" font-family="Arial, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" letter-spacing="1.8">ONE VIDEO → ALIGNED EVIDENCE</text>
+  <text x="648" y="117" fill="#D7E8E8" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="17" font-weight="600">按原视频时间对齐 · 不替 Agent 下结论</text>
+  <g>
+    <rect x="648" y="142" width="168" height="117" rx="12" fill="#102C3D" stroke="#31566A"/>
+    <rect x="658" y="152" width="148" height="83" rx="7" fill="#173B4A"/>
+    <circle cx="769" cy="175" r="14" fill="#FFB979"/>
+    <path d="M658 223 698 187l23 23 17-13 68 36H658z" fill="#24717A"/>
+    <path d="M658 225h148v10H658z" fill="#38C8D5"/>
+    <text x="660" y="251" fill="#C6DADD" font-family="Arial, Microsoft YaHei, sans-serif" font-size="12">00:12.4</text>
+    <rect x="834" y="142" width="168" height="117" rx="12" fill="#102C3D" stroke="#31566A"/>
+    <rect x="844" y="152" width="148" height="83" rx="7" fill="#173B4A"/>
+    <circle cx="878" cy="177" r="12" fill="#FF795E"/>
+    <path d="M844 216 874 190l23 17 26-28 69 56H844z" fill="#347E76"/>
+    <path d="M844 225h148v10H844z" fill="#38C8D5"/>
+    <text x="846" y="251" fill="#C6DADD" font-family="Arial, Microsoft YaHei, sans-serif" font-size="12">01:06.8</text>
+    <rect x="1020" y="142" width="168" height="117" rx="12" fill="#102C3D" stroke="#31566A"/>
+    <rect x="1030" y="152" width="148" height="83" rx="7" fill="#173B4A"/>
+    <path d="M1030 219 1062 188l24 18 23-27 69 56H1030z" fill="#24717A"/>
+    <circle cx="1148" cy="177" r="13" fill="#FFB979"/>
+    <path d="M1030 225h148v10h-148z" fill="#38C8D5"/>
+    <text x="1032" y="251" fill="#C6DADD" font-family="Arial, Microsoft YaHei, sans-serif" font-size="12">02:41.0</text>
+  </g>
+  <path d="M668 284H1168" stroke="#2B5E70" stroke-width="3" stroke-linecap="round"/>
+  <g fill="#FF795E" stroke="#0A2131" stroke-width="6">
+    <circle cx="732" cy="284" r="10"/>
+    <circle cx="918" cy="284" r="10"/>
+    <circle cx="1104" cy="284" r="10"/>
+  </g>
+  <g stroke="#376174" stroke-width="2" stroke-dasharray="4 6">
+    <path d="M732 294v29M918 294v29M1104 294v29"/>
+  </g>
+  <text x="649" y="342" fill="#8CAEB8" font-family="Arial, Microsoft YaHei, sans-serif" font-size="12" letter-spacing="1.5">TIMESTAMPED SPEECH / CAPTIONS</text>
+  <g fill="#DAE9E8">
+    <rect x="672" y="356" width="165" height="15" rx="7"/>
+    <rect x="683" y="378" width="130" height="9" rx="4" opacity=".55"/>
+    <rect x="859" y="356" width="180" height="15" rx="7"/>
+    <rect x="870" y="378" width="142" height="9" rx="4" opacity=".55"/>
+    <rect x="1055" y="356" width="140" height="15" rx="7"/>
+    <rect x="1066" y="378" width="111" height="9" rx="4" opacity=".55"/>
+  </g>
+  <text x="649" y="423" fill="#8CAEB8" font-family="Arial, Microsoft YaHei, sans-serif" font-size="12" letter-spacing="1.5">ORIGINAL AUDIO · LOCAL CACHE</text>
+  <path d="M668 454H1170" stroke="#214A5B" stroke-width="2"/>
+  <g fill="#38C8D5">
+    <rect x="691" y="441" width="5" height="26" rx="2"/><rect x="703" y="433" width="5" height="42" rx="2"/>
+    <rect x="715" y="446" width="5" height="16" rx="2"/><rect x="727" y="427" width="5" height="54" rx="2"/>
+    <rect x="739" y="438" width="5" height="32" rx="2"/><rect x="751" y="432" width="5" height="44" rx="2"/>
+    <rect x="763" y="443" width="5" height="22" rx="2"/><rect x="775" y="425" width="5" height="58" rx="2"/>
+    <rect x="787" y="437" width="5" height="34" rx="2"/><rect x="799" y="447" width="5" height="14" rx="2"/>
+  </g>
+  <g fill="#FF795E">
+    <rect x="862" y="439" width="5" height="30" rx="2"/><rect x="874" y="429" width="5" height="50" rx="2"/>
+    <rect x="886" y="444" width="5" height="20" rx="2"/><rect x="898" y="422" width="5" height="64" rx="2"/>
+    <rect x="910" y="433" width="5" height="42" rx="2"/><rect x="922" y="439" width="5" height="30" rx="2"/>
+    <rect x="934" y="427" width="5" height="54" rx="2"/><rect x="946" y="444" width="5" height="20" rx="2"/>
+    <rect x="958" y="434" width="5" height="40" rx="2"/><rect x="970" y="442" width="5" height="24" rx="2"/>
+  </g>
+  <g fill="#38C8D5">
+    <rect x="1033" y="445" width="5" height="18" rx="2"/><rect x="1045" y="433" width="5" height="42" rx="2"/>
+    <rect x="1057" y="425" width="5" height="58" rx="2"/><rect x="1069" y="439" width="5" height="30" rx="2"/>
+    <rect x="1081" y="430" width="5" height="48" rx="2"/><rect x="1093" y="444" width="5" height="20" rx="2"/>
+    <rect x="1105" y="436" width="5" height="36" rx="2"/><rect x="1117" y="427" width="5" height="54" rx="2"/>
+    <rect x="1129" y="441" width="5" height="26" rx="2"/><rect x="1141" y="448" width="5" height="12" rx="2"/>
+  </g>
+  <path d="M648 504H1188" stroke="#1D3D4F" stroke-width="2"/>
+  <text x="649" y="541" fill="#8EE6E9" font-family="Microsoft YaHei, Segoe UI, Arial, sans-serif" font-size="15" font-weight="700">帧图 + 转写 + 原始媒体 + 统一时间线</text>
+  <text x="649" y="565" fill="#7899A6" font-family="Arial, Microsoft YaHei, sans-serif" font-size="12" letter-spacing="1">EVIDENCE FIRST · AGENT MAKES THE CONCLUSION</text>
+</svg>
