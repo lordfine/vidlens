@@ -47,7 +47,17 @@ def run_checks() -> dict:
     except Exception as e:
         checks.append({"name": "numpy", "ok": False, "detail": str(e)})
 
-    # sherpa-onnx bundles the native runtime it was built against.
+    # sherpa-onnx-bin supplies the native runtime used by sherpa-onnx.
+    try:
+        from importlib.metadata import version
+        binary_version = version("sherpa-onnx-bin")
+        checks.append({"name": "sherpa-onnx-bin", "ok": True,
+                       "detail": binary_version})
+    except Exception as e:
+        checks.append({"name": "sherpa-onnx-bin", "ok": False,
+                       "detail": str(e)})
+
+    # 验证 sherpa-onnx Python 接口和模型缓存。
     try:
         from .asr.sensevoice import _import_sherpa
         _import_sherpa()
@@ -85,7 +95,8 @@ def run_checks() -> dict:
         checks.append({"name": "cache", "ok": False, "detail": str(e)})
 
     hard_fail = [c for c in checks if not c["ok"] and
-                 c["name"] in ("python", "ffmpeg", "yt-dlp", "numpy", "cache")]
+                 c["name"] in ("python", "ffmpeg", "yt-dlp", "numpy",
+                               "sherpa-onnx-bin", "cache")]
     status = "degraded" if any(not c["ok"] for c in checks) else "ok"
     return {
         "ok": not hard_fail,
@@ -93,5 +104,6 @@ def run_checks() -> dict:
         "version": __version__,
         "checks": checks,
         "hint": None if not hard_fail else
-        "修复失败的必选项(ffmpeg/yt-dlp/numpy/cache)后重试;网络项失败只影响对应平台。",
+        "修复失败的必选项(ffmpeg/yt-dlp/numpy/sherpa-onnx-bin/cache)后重试;"
+        "网络项失败只影响对应平台。",
     }

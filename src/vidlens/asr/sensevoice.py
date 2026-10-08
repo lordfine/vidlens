@@ -123,33 +123,46 @@ _DLL_RUNTIME_HANDLES = []
 
 
 def _register_sherpa_dll_directory() -> None:
-    """Windows 优先使用 sherpa-onnx wheel 自带的 ONNX Runtime。"""
+    """Windows 优先加载 sherpa-onnx-core 提供的匹配 ONNX Runtime。"""
     if sys.platform != "win32":
         return
+    from importlib.metadata import PackageNotFoundError, distribution
     from importlib.util import find_spec
 
-    spec = find_spec("sherpa_onnx")
-    if not spec or not spec.origin:
-        return
-    dll_dir = Path(spec.origin).parent / "lib"
-    if not dll_dir.is_dir():
-        return
-    resolved = str(dll_dir.resolve())
-    if resolved not in _DLL_DIRECTORIES:
-        # 保留句柄，避免目录搜索路径被提前移除。
-        _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(resolved))
-        runtime = dll_dir / "onnxruntime.dll"
-        if runtime.is_file():
-            import ctypes
+    runtimes = []
+    try:
+        binary_dist = distribution("sherpa-onnx-core")
+        for entry in binary_dist.files or []:
+            if Path(str(entry)).name.lower() == "onnxruntime.dll":
+                runtime = Path(binary_dist.locate_file(entry)).resolve()
+                if runtime.is_file():
+                    runtimes.append(runtime)
+    except PackageNotFoundError:
+        pass
 
-            # 用绝对路径预加载 wheel 内的运行库，避免 Windows 选中旧系统副本。
-            _DLL_RUNTIME_HANDLES.append(
-                ctypes.WinDLL(str(runtime.resolve()), winmode=0x00000008))
-        _DLL_DIRECTORIES.add(resolved)
+    spec = find_spec("sherpa_onnx")
+    if spec and spec.origin:
+        runtime = Path(spec.origin).parent / "lib" / "onnxruntime.dll"
+        if runtime.is_file():
+            runtimes.append(runtime.resolve())
+
+    for runtime in runtimes:
+        dll_dir = str(runtime.parent)
+        if dll_dir not in _DLL_DIRECTORIES:
+            # 保留句柄，避免目录搜索路径被提前移除。
+            _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(dll_dir))
+            _DLL_DIRECTORIES.add(dll_dir)
+
+    if runtimes and not _DLL_RUNTIME_HANDLES:
+        import ctypes
+
+        # 按包清单中的绝对路径预加载运行库，避开 Windows 选中的旧系统副本。
+        _DLL_RUNTIME_HANDLES.append(
+            ctypes.WinDLL(str(runtimes[0]), winmode=0x00000008))
 
 
 def _import_sherpa():
-    """Import sherpa-onnx and use the runtime bundled with its wheel."""
+    """Import sherpa-onnx after registering its matching native runtime."""
     _register_sherpa_dll_directory()
     import sherpa_onnx
 
