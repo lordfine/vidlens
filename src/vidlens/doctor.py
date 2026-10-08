@@ -39,6 +39,14 @@ def run_checks() -> dict:
     except Exception as e:
         checks.append({"name": "yt-dlp", "ok": False, "detail": str(e)})
 
+    # SenseVoice uses NumPy to load and normalize audio samples.
+    try:
+        import numpy
+        checks.append({"name": "numpy", "ok": True,
+                       "detail": numpy.__version__})
+    except Exception as e:
+        checks.append({"name": "numpy", "ok": False, "detail": str(e)})
+
     # sherpa-onnx bundles the native runtime it was built against.
     try:
         from .asr.sensevoice import _import_sherpa
@@ -77,7 +85,7 @@ def run_checks() -> dict:
         checks.append({"name": "cache", "ok": False, "detail": str(e)})
 
     hard_fail = [c for c in checks if not c["ok"] and
-                 c["name"] in ("python", "ffmpeg", "yt-dlp", "cache")]
+                 c["name"] in ("python", "ffmpeg", "yt-dlp", "numpy", "cache")]
     status = "degraded" if any(not c["ok"] for c in checks) else "ok"
     return {
         "ok": not hard_fail,
@@ -85,5 +93,5 @@ def run_checks() -> dict:
         "version": __version__,
         "checks": checks,
         "hint": None if not hard_fail else
-        "修复失败的必选项(ffmpeg/yt-dlp/cache)后重试;网络项失败只影响对应平台。",
+        "修复失败的必选项(ffmpeg/yt-dlp/numpy/cache)后重试;网络项失败只影响对应平台。",
     }
