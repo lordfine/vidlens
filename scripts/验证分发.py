@@ -38,7 +38,7 @@ def main():
         run(["uv", "pip", "install", "--python", str(python), str(wheel)], cwd=root)
 
         def cli(*arguments):
-            return json.loads(run([str(python), "-I", "-m", "vidlens.cli", *arguments], cwd=root))
+            return json.loads(run([str(python), "-I", "-X", "utf8", "-m", "vidlens.cli", *arguments], cwd=root))
 
         capabilities = cli("capabilities")
         assert capabilities["version"] == release and capabilities["contract_version"] == 2
@@ -49,7 +49,7 @@ def main():
         assert cli("skill", "install", "--dest", str(skill))["status"] == "installed"
         assert cli("skill", "install", "--dest", str(skill))["status"] == "unchanged"
         assert (skill / "SKILL.md").read_bytes() == (repository / "SKILL.md").read_bytes()
-        ffmpeg = run([str(python), "-I", "-c",
+        ffmpeg = run([str(python), "-I", "-X", "utf8", "-c",
                       "from vidlens.ffutil import ffmpeg_path; print(ffmpeg_path())"], cwd=root).strip()
         media = root / "离线视频.mp4"
         run([ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
