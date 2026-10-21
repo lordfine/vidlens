@@ -62,6 +62,13 @@ def probe_duration(media_path: str) -> float | None:
     return None
 
 
+def probe_streams(media_path: str) -> dict:
+    """读取媒体流种类，区分纯音频和无音轨视频。"""
+    result = _run(["-i", media_path], timeout=120)
+    return {"has_video": bool(re.search(r"Stream #[^\n]*: Video:", result.stderr)),
+            "has_audio": bool(re.search(r"Stream #[^\n]*: Audio:", result.stderr))}
+
+
 def make_wav(media_path: str, wav_path: str) -> str:
     """16 kHz mono PCM wav for ASR."""
     r = _run(["-y", "-i", media_path, "-vn", "-ac", "1", "-ar", "16000",

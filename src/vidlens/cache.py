@@ -25,7 +25,7 @@ DEFAULT_MAX_BYTES = 2 * 1024 * 1024 * 1024  # 2 GiB
 def base_dir() -> Path:
     env = os.environ.get("vidlens_CACHE")
     if env:
-        return Path(env)
+        return Path(env).expanduser().resolve()
     if sys.platform == "win32":
         local = os.environ.get("LOCALAPPDATA")
         root = Path(local) if local else Path.home() / "AppData" / "Local"

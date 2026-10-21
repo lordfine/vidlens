@@ -10,11 +10,11 @@ import json
 import time
 from pathlib import Path
 
+from . import __version__
 from . import cache as cache_mod
 from . import frames as frames_mod
 from .agentio import VidlensError
-from .asr import get_transcript_cached
-from .platforms import media as media_mod
+from .字幕准备 import collect
 
 GRANULARITY = {
     "coarse": {
@@ -54,18 +54,24 @@ def build(target, mod, meta, *, granularity: str = "medium",
     g = GRANULARITY[granularity]
     jdir = out_dir or cache_mod.job_dir(meta["platform"], meta["video_id"],
                                         "prepare")
-    jdir = Path(jdir)
+    jdir = Path(jdir).expanduser().resolve()
+    if any((jdir / name).exists() for name in (
+            "manifest.json", "context.md", "evidence-timeline.json", "asr.json", "frames")):
+        raise VidlensError("输出位置已有素材包或同名产物", errcode="output_exists",
+                           hint="通过 --out 指定新的目录；已有素材包保持原样。")
     jdir.mkdir(parents=True, exist_ok=True)
     (jdir / "frames").mkdir(exist_ok=True)
 
     manifest = {
         "tool": "vidlens",
+        "tool_version": __version__,
+        "schema_version": 2,
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "granularity": granularity,
         "video": {k: meta.get(k) for k in (
             "platform", "video_id", "webpage_url", "title", "uploader",
             "duration", "description", "upload_date", "view_count",
-            "like_count")},
+            "like_count", "has_video", "has_audio")},
         "subtitle": None,
         "frames": None,
         "contact_sheet": None,
@@ -73,37 +79,15 @@ def build(target, mod, meta, *, granularity: str = "medium",
     }
 
     # ---- 1. subtitles (CC first, ASR fallback) ----
-    sub_files = {}
-    sub_source = None
-    track = None
-    segs: list[dict] = []
-    if hasattr(mod, "fetch_subtitles"):
-        try:
-            track, segs = mod.fetch_subtitles(target, meta, cookiefile)
-        except VidlensError:
-            track, segs = None, []
-    if segs:
-        sub_source = "cc"
-        sub_files = media_mod.save_subtitle(segs, jdir, base="subtitle")
-    # Keep the original audio available to the calling agent even when CC exists.
-    audio = mod.download(target, meta, cookiefile, "audio", 1080, fresh)
-    if not segs and not no_asr:
-        tr = get_transcript_cached(meta["platform"], meta["video_id"],
-                                   audio["path"],
-                                   lang=asr_lang or "auto", model=asr_model,
-                                   fresh=fresh, glossary=glossary)
-        segs = tr["segments"]
-        sub_source = "asr"
-        sub_files = media_mod.save_subtitle(segs, jdir, base="transcript")
-        (jdir / "asr.json").write_text(
-            json.dumps(tr, ensure_ascii=False, indent=1), encoding="utf-8")
-        sub_files["asr_detail"] = str(jdir / "asr.json")
-    manifest["subtitle"] = {
-        "source": sub_source,
-        "track": track,
-        "segments": len(segs),
-        "files": sub_files,
-    }
+    text = collect(target, mod, meta, jdir, mode="subtitles_only" if no_asr else "prefer_subtitles",
+                   lang=asr_lang if asr_lang != "auto" else None, model=asr_model,
+                   cookiefile=cookiefile, fresh=fresh, glossary=glossary,
+                   keep_audio=True, require_text=False)
+    sub_files, sub_source = text["files"], text["source"]
+    segs, audio = text["records"], text["audio"]
+    manifest["subtitle"] = {key: text[key] for key in (
+        "source", "track", "engine", "model", "lang", "provenance", "files")}
+    manifest["subtitle"]["segments"] = len(segs)
     manifest["files"].update(sub_files)
 
     # ---- 2. frames ----
@@ -111,19 +95,21 @@ def build(target, mod, meta, *, granularity: str = "medium",
     if frames_overrides:
         fparams.update({k: v for k, v in frames_overrides.items()
                         if v is not None})
-    video = mod.download(target, meta, cookiefile, "video",
-                         g["max_height"], fresh)
-    frame_result = frames_mod.extract(
-        video["path"], jdir / "frames", mode=fparams["mode"],
-        fps=fparams.get("fps", 1.0), count=fparams.get("count", 12),
-        threshold=fparams.get("threshold", 0.3),
-        size=fparams.get("size"), fmt=fparams.get("fmt", "jpg"),
-        duration=meta.get("duration"), max_frames=max_frames,
-        allow_over_100=allow_over_100_frames)
+    video = None
+    frame_result = frames_mod.ExtractResult([], False, 0)
+    if meta.get("has_video") is not False:
+        video = mod.download(target, meta, cookiefile, "video", g["max_height"], fresh)
+        frame_result = frames_mod.extract(
+            video["path"], jdir / "frames", mode=fparams["mode"],
+            fps=fparams.get("fps", 1.0), count=fparams.get("count", 12),
+            threshold=fparams.get("threshold", 0.3),
+            size=fparams.get("size"), fmt=fparams.get("fmt", "jpg"),
+            duration=meta.get("duration"), max_frames=max_frames,
+            allow_over_100=allow_over_100_frames)
     recs = frame_result.records
     scene_recs = []
     scene_truncated = False
-    manifest["frames"] = {"params": fparams, "files": recs,
+    manifest["frames"] = {"params": fparams, "files": recs, "available": video is not None,
                           "truncated": frame_result.truncated,
                           "total_candidates": frame_result.total_candidates,
                           "scene_files": scene_recs,
@@ -145,22 +131,23 @@ def build(target, mod, meta, *, granularity: str = "medium",
         cs = jdir / "contact_sheet.jpg"
         cs_path = frames_mod.contact_sheet(recs, cs)
         manifest["contact_sheet"] = cs_path
-    manifest["files"]["video_local"] = video["path"]
-    manifest["files"]["audio_local"] = audio["path"]
+    manifest["files"]["video_local"] = video["path"] if video else None
+    manifest["files"]["audio_local"] = audio["path"] if audio else None
+    primary = video or audio
     manifest["media"] = {
         # Preserve the original flat fields for existing consumers.
-        "source_level": video["source_level"],
-        "retried": video["retried"],
+        "source_level": primary["source_level"],
+        "retried": primary["retried"],
         "video": {"source_level": video["source_level"],
-                  "retried": video["retried"]},
+                  "retried": video["retried"]} if video else None,
         "audio": {"source_level": audio["source_level"],
-                  "retried": audio["retried"]},
+                  "retried": audio["retried"]} if audio else None,
         "cache_lifetime": "有效到用户清理对应缓存",
     }
     manifest["files"]["frames_dir"] = str(jdir / "frames")
 
     timeline = _build_timeline(segs, recs, sub_source, manifest["files"],
-                               video["path"], audio["path"],
+                               manifest["files"]["video_local"], manifest["files"]["audio_local"],
                                meta.get("duration"))
     timeline_path = jdir / "evidence-timeline.json"
     timeline_path.write_text(json.dumps(timeline, ensure_ascii=False, indent=1),
@@ -177,8 +164,6 @@ def build(target, mod, meta, *, granularity: str = "medium",
     manifest["files"]["context_md"] = str(ctx_path)
 
     mpath = jdir / "manifest.json"
-    mpath.write_text(json.dumps(manifest, ensure_ascii=False, indent=1),
-                     encoding="utf-8")
     manifest["files"]["manifest"] = str(mpath)
     mpath.write_text(json.dumps(manifest, ensure_ascii=False, indent=1),
                      encoding="utf-8")

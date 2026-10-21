@@ -173,3 +173,20 @@ class _T:
         self.platform = Platform.douyin
         self.url = url
         self.video_id = "7607060532303169189"
+
+
+def test_download_preserves_classified_auth_failure(monkeypatch, douyin_tmp_cache):
+    import pytest
+
+    from vidlens.agentio import AuthNeededError
+
+    monkeypatch.setattr(douyin, "_fetch_item_with_refresh", lambda *arguments: None)
+
+    def denied(*arguments, **options):
+        raise AuthNeededError("需要有效登录态", hint="提供有效 cookie。")
+
+    monkeypatch.setattr(douyin.media_mod, "download_media", denied)
+    with pytest.raises(AuthNeededError):
+        douyin.download(_T("https://www.douyin.com/video/7607060532303169189"),
+                        {"platform": "douyin", "video_id": "7607060532303169189"},
+                        None, "video", 1080, True)

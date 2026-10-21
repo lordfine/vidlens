@@ -141,7 +141,6 @@ def download(target: Target, meta: dict, cookiefile: str | None, kind: str,
         ff = ffutil.ffmpeg_path()
     except Exception:
         ff = None
-    p = media_mod.download_media(
+    return media_mod.download_media(
         meta, kind=kind, cookiefile=cookiefile, max_height=max_height,
         fresh=fresh, ffmpeg_location=ff)
-    return {"path": str(p), "source_level": "ytdlp", "retried": False}

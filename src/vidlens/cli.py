@@ -21,10 +21,18 @@ from . import frames as frames_mod
 from . import prepare as prepare_mod
 from .agentio import NotSupportedError, VidlensError, emit, emit_error
 from .platforms import cookie_from_args
-from .platforms import media as media_mod
 
 PLATFORMS = {"bilibili": "vidlens.platforms.bilibili",
-             "douyin": "vidlens.platforms.douyin"}
+             "douyin": "vidlens.platforms.douyin", "local": "vidlens.platforms.本地"}
+
+
+class AgentParser(argparse.ArgumentParser):
+    """参数解析失败也遵循 Agent 契约。"""
+
+    def error(self, message):
+        raise VidlensError(
+            f"命令参数无效: {message}", errcode="bad_args",
+            hint=f"运行 `{self.prog} --help` 查看参数要求后重试。")
 
 
 def _platform_mod(target: urls.Target):
@@ -37,8 +45,14 @@ def _platform_mod(target: urls.Target):
 
 
 def _prep_url(url: str, cookie: str | None, cookie_file: str | None,
-              fresh: bool):
+              fresh: bool, subtitle_file: str | None = None):
     target = urls.classify(url)
+    if subtitle_file:
+        path = Path(subtitle_file).expanduser().resolve()
+        if not path.is_file():
+            raise VidlensError("指定字幕文件不存在", errcode="bad_subtitle",
+                               hint="检查 --subtitle-file 路径，提供现有字幕文件。")
+        target.extra["subtitle_file"] = str(path)
     mod = _platform_mod(target)
     cookiefile = cookie_from_args(target.platform.value, cookie, cookie_file)
     return target, mod, cookiefile
@@ -46,7 +60,7 @@ def _prep_url(url: str, cookie: str | None, cookie_file: str | None,
 
 def _out_dir(ns, platform: str, video_id: str, label: str) -> Path:
     if getattr(ns, "out", None):
-        p = Path(ns.out)
+        p = Path(ns.out).expanduser().resolve()
         p.mkdir(parents=True, exist_ok=True)
         return p
     return cache_mod.job_dir(platform, video_id, label)
@@ -76,95 +90,36 @@ def cmd_meta(ns) -> int:
     return 0
 
 
-def cmd_subs(ns) -> int:
-    target, mod, cookiefile = _prep_url(ns.url, ns.cookie, ns.cookie_file,
-                                        ns.fresh)
+def _collect_text(ns, *, force_asr=False):
+    from .lexicon import parse_glossary_arg
+    from .字幕准备 import collect
+
+    target, mod, cookiefile = _prep_url(ns.url, ns.cookie, ns.cookie_file, ns.fresh,
+                                       ns.subtitle_file)
     meta = mod.fetch_meta(target, cookiefile, fresh=ns.fresh)
-    out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "subs")
+    out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "asr" if force_asr else "subs")
+    mode = "asr" if force_asr else ("subtitles_only" if ns.no_asr else "prefer_subtitles")
+    result = collect(target, mod, meta, out_dir, mode=mode, lang=ns.lang,
+                     model=ns.model if force_asr else ns.asr_model,
+                     cookiefile=cookiefile, fresh=ns.fresh,
+                     glossary=parse_glossary_arg(ns.glossary))
+    audio = result["audio"]
+    return {key: result[key] for key in ("source", "track", "engine", "model", "lang", "files", "duration", "provenance")} | {
+        "segments": len(result["records"]),
+        "media_source_level": audio["source_level"] if audio else None,
+        "media_retried": audio["retried"] if audio else None,
+        "primary_file": result["files"].get(ns.format), "out_dir": str(out_dir),
+        "audio": audio["path"] if audio else None,
+    }
 
-    track, segs = None, []
-    if hasattr(mod, "fetch_subtitles"):
-        try:
-            track, segs = mod.fetch_subtitles(target, meta, cookiefile,
-                                              lang=ns.lang)
-        except VidlensError as e:
-            if e.errcode in ("auth_needed", "blocked"):
-                raise
-            track, segs = None, []
 
-    source = "cc"
-    asr = None
-    if not segs:
-        if ns.no_asr:
-            raise VidlensError(
-                "该视频没有可用字幕(CC)且 --no-asr 已指定",
-                hint="去掉 --no-asr 自动语音转文字,或运行 "
-                     "`vidlens transcribe`。", errcode="no_subtitles")
-        audio_dl = mod.download(target, meta, cookiefile, "audio", 1080,
-                                ns.fresh)
-        audio = audio_dl["path"]
-        from .asr import get_transcript_cached
-        from .lexicon import parse_glossary_arg
-        asr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
-                                    lang=ns.lang or "auto",
-                                    model=ns.asr_model, fresh=ns.fresh,
-                                    glossary=parse_glossary_arg(ns.glossary))
-        segs = asr["segments"]
-        source = "asr"
-
-    base = "subtitle" if source == "cc" else "transcript"
-    files = media_mod.save_subtitle(segs, out_dir, base=base)
-    fmt = ns.format
-    emit({
-        "source": source,
-        "track": track,
-        "engine": asr["engine"] if asr else None,
-        "model": asr["model"] if asr else None,
-        "lang": (track or {}).get("lang") if track else (asr or {}).get("lang"),
-        "segments": len(segs),
-        "media_source_level": audio_dl["source_level"] if asr else None,
-        "media_retried": audio_dl["retried"] if asr else None,
-        "files": files,
-        "primary_file": files.get(fmt) or files.get("srt") or files.get("txt"),
-        "out_dir": str(out_dir),
-        "hint": "primary_file 是所请求格式的路径;json 含精确时间段,txt 适合直接阅读。",
-    }, pretty=ns.pretty)
+def cmd_subs(ns) -> int:
+    emit(_collect_text(ns), pretty=ns.pretty)
     return 0
 
 
 def cmd_transcribe(ns) -> int:
-    target, mod, cookiefile = _prep_url(ns.url, ns.cookie, ns.cookie_file,
-                                        ns.fresh)
-    meta = mod.fetch_meta(target, cookiefile, fresh=ns.fresh)
-    out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "asr")
-    audio_dl = mod.download(target, meta, cookiefile, "audio", 1080,
-                            ns.fresh)
-    audio = audio_dl["path"]
-    from .asr import get_transcript_cached
-    from .lexicon import parse_glossary_arg
-    tr = get_transcript_cached(meta["platform"], meta["video_id"], audio,
-                               lang=ns.lang or "auto", model=ns.model,
-                               fresh=ns.fresh,
-                               glossary=parse_glossary_arg(ns.glossary))
-    files = media_mod.save_subtitle(tr["segments"], out_dir, base="transcript")
-    detail = out_dir / "asr.json"
-    import json
-    detail.write_text(json.dumps(tr, ensure_ascii=False, indent=1),
-                      encoding="utf-8")
-    files["detail"] = str(detail)
-    emit({
-        "engine": tr["engine"],
-        "model": tr["model"],
-        "lang": tr["lang"],
-        "duration": tr["duration"],
-        "segments": len(tr["segments"]),
-        "media_source_level": audio_dl["source_level"],
-        "media_retried": audio_dl["retried"],
-        "files": files,
-        "primary_file": files.get(ns.format) or files.get("txt"),
-        "out_dir": str(out_dir),
-        "audio": audio,
-    }, pretty=ns.pretty)
+    emit(_collect_text(ns, force_asr=True), pretty=ns.pretty)
     return 0
 
 
@@ -178,6 +133,9 @@ def cmd_frames(ns) -> int:
     target, mod, cookiefile = _prep_url(ns.url, ns.cookie, ns.cookie_file,
                                         ns.fresh)
     meta = mod.fetch_meta(target, cookiefile, fresh=ns.fresh)
+    if meta.get("has_video") is False:
+        raise VidlensError("该媒体没有视频画面", errcode="no_video",
+                           hint="纯音频请使用 subs、transcribe 或 prepare。")
     out_dir = _out_dir(ns, meta["platform"], meta["video_id"], "frames")
     video = mod.download(target, meta, cookiefile, "video", ns.max_height,
                          ns.fresh)
@@ -229,7 +187,7 @@ def cmd_prepare(ns) -> int:
         frame_count, ns.max_frames, ns.allow_over_100_frames,
         uses_count=frame_mode in ("adaptive", "count"))
     target, mod, cookiefile = _prep_url(ns.url, ns.cookie, ns.cookie_file,
-                                        ns.fresh)
+                                        ns.fresh, ns.subtitle_file)
     meta = mod.fetch_meta(target, cookiefile, fresh=ns.fresh)
     overrides = {"mode": ns.frames_mode, "count": ns.frames_count,
                  "fps": ns.frames_fps, "size": ns.frames_size}
@@ -275,10 +233,48 @@ def cmd_doctor(ns) -> int:
     return 0 if r["ok"] else 4
 
 
+def cmd_skill(ns) -> int:
+    from . import 技能
+
+    if ns.skill_cmd == "install":
+        if not ns.dest:
+            raise VidlensError(
+                "安装 Skill 需要指定目标技能目录",
+                hint="使用 `vidlens skill install --dest <技能目录>/vidlens`。",
+                errcode="bad_args",
+            )
+        result = 技能.install(ns.dest, force=ns.force)
+    else:
+        result = 技能.info()
+    emit(result, pretty=ns.pretty)
+    return 0
+
+
+def cmd_capabilities(ns) -> int:
+    from .能力 import describe
+
+    emit(describe(), pretty=ns.pretty)
+    return 0
+
+
+def cmd_export(ns) -> int:
+    from .素材包 import export_bundle
+
+    emit(export_bundle(ns.bundle, ns.out), pretty=ns.pretty)
+    return 0
+
+
+def cmd_verify(ns) -> int:
+    from .素材包 import verify_bundle
+
+    emit(verify_bundle(ns.bundle), pretty=ns.pretty)
+    return 0
+
+
 # ------------------------------------------------------------------ argp ----
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
+    p = AgentParser(
         prog="vidlens",
         description="面向 agent 的视频解析工具(抖音/B站):字幕、语音转文字、"
                     "拆帧、综合素材包。所有输出为 JSON。")
@@ -293,7 +289,8 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--fresh", action="store_true",
                         help="忽略缓存重新抓取/下载")
         if need_url:
-            sp.add_argument("url", help="视频页或分享短链 URL")
+            sp.add_argument("url", help="视频页、分享短链或本地媒体文件路径")
+            sp.add_argument("--subtitle-file", help="显式提供 UTF-8 的 SRT、VTT 或 JSON 字幕")
 
     sp = sub.add_parser("meta", help="获取视频元信息(不下载)")
     common(sp)
@@ -378,7 +375,31 @@ def build_parser() -> argparse.ArgumentParser:
     common(sp, need_url=False)
     sp.set_defaults(fn=cmd_doctor)
 
-    for spx in sub.choices.values():
+    sp = sub.add_parser("skill", help="查看或安装随 CLI 分发的 Skill")
+    sp.add_argument("skill_cmd", nargs="?", default="info", choices=["info", "install"])
+    sp.add_argument("--dest", help="目标技能目录，包含最终的 vidlens 目录名")
+    sp.add_argument("--force", action="store_true", help="替换已有的 SKILL.md，保留其他文件")
+    sp.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
+    sp.set_defaults(fn=cmd_skill)
+
+    sp = sub.add_parser("capabilities", help="输出 CLI 版本、Agent 契约版本和可用能力")
+    sp.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
+    sp.set_defaults(fn=cmd_capabilities)
+
+    sp = sub.add_parser("export", help="导出含媒体和相对引用的可搬运素材包")
+    sp.add_argument("bundle", help="已有素材包目录")
+    sp.add_argument("--out", required=True, help="不存在的导出目标目录")
+    sp.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
+    sp.set_defaults(fn=cmd_export)
+
+    sp = sub.add_parser("verify", help="校验素材包引用、时间线与内容指纹")
+    sp.add_argument("bundle", help="素材包目录")
+    sp.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
+    sp.set_defaults(fn=cmd_verify)
+
+    for name, spx in sub.choices.items():
+        if name in ("skill", "capabilities", "export", "verify"):
+            continue
         if "out" not in spx._option_string_actions:
             spx.add_argument("--out", default=None,
                              help="输出目录(默认:缓存内 job 目录)")
@@ -392,22 +413,22 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
-    ns = build_parser().parse_args(argv)
+    ns = None
     try:
+        ns = build_parser().parse_args(argv)
         return ns.fn(ns)
     except VidlensError as e:
-        return emit_error(e, pretty=ns.pretty)
+        return emit_error(e, pretty=getattr(ns, "pretty", False))
     except KeyboardInterrupt:
-        sys.stderr.write('{"ok": false, "error": {"code": "interrupted", '
-                         '"message": "用户中断"}}\n')
-        return 130
+        return emit_error(VidlensError("用户中断", errcode="interrupted",
+                                      hint="已保留完成的缓存；需要继续时重试原命令。"))
     except Exception as e:  # never break the JSON contract
         return emit_error(
             VidlensError(f"内部错误: {type(e).__name__}: {e}",
                          hint="这是 bug,可带完整命令重试;运行 `vidlens doctor` "
                               "排查环境;持续失败请反馈。",
                          errcode="internal_error"),
-            pretty=ns.pretty)
+            pretty=getattr(ns, "pretty", False))
 
 
 if __name__ == "__main__":

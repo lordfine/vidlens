@@ -6,6 +6,24 @@ on:
   pull_request:
 
 jobs:
+  distribution:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 安装开发依赖
+        run: uv sync --python 3.11 --group dev
+      - name: 构建源码包与安装包
+        run: uv build --out-dir dist
+      - name: 隔离安装并验证技能与本地素材包
+        run: uv run python -X utf8 scripts/验证分发.py
+
   test:
     strategy:
       matrix:

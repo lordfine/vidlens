@@ -16,7 +16,7 @@ import yt_dlp
 
 from .. import cache as cache_mod
 from .. import ffutil
-from ..agentio import BlockedError, NotSupportedError
+from ..agentio import BlockedError, NotSupportedError, VidlensError
 from ..urls import Target
 from . import interpret_ytdlp_error, load_meta, save_meta, ytdlp_opts
 from . import media as media_mod
@@ -252,20 +252,33 @@ def _play_urls(item: dict) -> list[tuple[str, str]]:
 
 def _download_url(url: str, dest, jar: dict) -> bool:
     """Single direct-download attempt. Returns True on a plausible file."""
+    import tempfile
+    from pathlib import Path
+
     import httpx
+
+    temporary = None
     try:
+        with tempfile.NamedTemporaryFile(dir=dest.parent, suffix=".mp4", delete=False) as staging:
+            temporary = Path(staging.name)
         with httpx.Client(timeout=60, follow_redirects=True, cookies=jar,
                           headers={"User-Agent": MOBILE_UA,
                                    "Referer": "https://www.douyin.com/"}) as c:
             with c.stream("GET", url) as resp:
                 if resp.status_code != 200:
                     return False
-                with open(dest, "wb") as f:
+                with open(temporary, "wb") as f:
                     for chunk in resp.iter_bytes(1 << 20):
                         f.write(chunk)
+        if temporary.stat().st_size <= 1024:
+            return False
+        temporary.replace(dest)
+        return True
     except Exception:
         return False
-    return dest.is_file() and dest.stat().st_size > 1024
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _download_with_fallback(item: dict, dest, jar: dict) -> str | None:
@@ -284,17 +297,14 @@ def download(target: Target, meta: dict, cookiefile: str | None, kind: str,
     from ..locking import cache_write_lock
 
     dest = cache_mod.video_dir("douyin", meta["video_id"]) / "media" / "video.mp4"
-    if dest.is_file() and dest.stat().st_size > 1024 and not fresh:
-        try:
-            dest.touch()
-        except OSError:
-            pass
-        return {"path": str(dest), "source_level": "cache", "retried": False}
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     vid = meta.get("video_id") or target.video_id
     retried = False
     with cache_write_lock(dest.parent):
+        if dest.is_file() and dest.stat().st_size > 1024 and not fresh:
+            dest.touch()
+            return {"path": str(dest.resolve()), "source_level": "cache", "retried": False}
         item = _fetch_item_with_refresh(vid, cookiefile)
         if item:
             jar = _cookie_jar(cookiefile)
@@ -317,9 +327,11 @@ def download(target: Target, meta: dict, cookiefile: str | None, kind: str,
     except Exception:
         ff = None
     try:
-        p = media_mod.download_media(
+        result = media_mod.download_media(
             meta, kind=kind, cookiefile=cookiefile, max_height=max_height,
             fresh=fresh, ffmpeg_location=ff)
-        return {"path": str(p), "source_level": "ytdlp", "retried": retried}
+        return {**result, "retried": retried}
+    except VidlensError:
+        raise
     except Exception as e:
         raise interpret_ytdlp_error("douyin", e) from e

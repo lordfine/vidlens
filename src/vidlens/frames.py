@@ -277,7 +277,7 @@ def _adaptive_budget(duration: float, scene_count: int, base: int,
             (base - MIN_ADAPTIVE_FRAMES) * cuts_per_minute / baseline_density)
     else:
         estimate = base + round((cuts_per_minute - baseline_density) * scale)
-    return max(MIN_ADAPTIVE_FRAMES, min(ceiling, estimate))
+    return min(ceiling, max(MIN_ADAPTIVE_FRAMES, estimate))
 
 
 def _adaptive_stamps(duration: float, scene_times: list[float],

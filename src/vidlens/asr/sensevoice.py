@@ -261,9 +261,9 @@ def _load_samples(wav_path: str):
 
 
 def transcribe(media_path: str, *, lang: str = "auto",
-               glossary: dict[str, str] | None = None) -> dict:
+               glossary: dict[str, str] | None = None, fresh: bool = False) -> dict:
     rec = _recognizer(lang)
-    wav, duration = prepare_wav(media_path)
+    wav, duration = prepare_wav(media_path, fresh=fresh)
     segments: list[dict] = []
     for chunk, offset in split_wav(wav):
         sr, samples = _load_samples(chunk)

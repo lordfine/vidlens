@@ -33,7 +33,7 @@ class VidlensError(Exception):
                  errcode: str | None = None, exit_code: int | None = None):
         super().__init__(message)
         self.message = message
-        self.hint = hint
+        self.hint = hint or "检查输入与命令参数；运行 `vidlens <命令> --help` 查看用法。"
         if errcode is not None:
             self.errcode = errcode
         if exit_code is not None:

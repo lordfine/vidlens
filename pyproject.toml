@@ -1,6 +1,6 @@
 [project]
 name = "vidlens"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Agent-friendly video parsing CLI (Douyin/Bilibili first): metadata, subtitles/ASR, frame extraction, context bundles"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,6 +39,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vidlens"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"SKILL.md" = "vidlens/技能资源/SKILL.md"
+
+[tool.hatch.version]
+path = "src/vidlens/__init__.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

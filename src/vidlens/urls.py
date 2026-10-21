@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
 import httpx
 
@@ -20,6 +21,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 class Platform(StrEnum):
     bilibili = "bilibili"
     douyin = "douyin"
+    local = "local"
     unknown = "unknown"
 
 
@@ -116,6 +118,15 @@ def _short_fail(target: Target):
 
 
 def classify(url_or_text: str, *, expand: bool = True) -> Target:
+    raw_path = url_or_text.strip().strip("'\"")
+    if not re.match(r"^https?://", raw_path):
+        try:
+            path = Path(raw_path).expanduser().resolve()
+            if path.is_file():
+                from .存储 import fingerprint
+                return Target(Platform.local, str(path), fingerprint(path), "file", raw=url_or_text)
+        except (OSError, ValueError):
+            pass
     url = normalize_input(url_or_text)
     if not re.match(r"^https?://", url):
         from .agentio import VidlensError

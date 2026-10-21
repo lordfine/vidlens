@@ -4,7 +4,7 @@
 
 # vidlens · 视频透镜
 
-**让 AI Agent 看懂整段视频：说了什么、画面出现什么，以及分别发生在何时。**
+**Skill + CLI，让 AI Agent 看懂整段视频：说了什么、画面出现什么，以及分别发生在何时。**
 
 抖音与 B 站 → 原视频、音频、带时间戳转写、自适应帧图和统一证据时间线
 
@@ -60,6 +60,8 @@ vidlens frames "https://v.douyin.com/xxxx/" --mode count --start 120 --end 150 -
 
 ## 安装
 
+vidlens 由两个配合使用的部分组成：CLI 获取并处理视频，Skill 指导 Agent 选择命令、读取多模态证据、核对内容并输出分析。CLI 也可以独立使用。
+
 ### 全局安装
 
 使用 [uv](https://docs.astral.sh/uv/) 将 `vidlens` 安装为全局命令：
@@ -75,6 +77,30 @@ vidlens doctor
 uv tool upgrade vidlens
 ```
 
+### 安装 Skill
+
+CLI 安装包附带与该版本配套的 [SKILL.md](SKILL.md)，安装时不需要额外下载。`--dest` 指定最终技能目录，包含 `vidlens` 目录名。
+
+Codex 示例（PowerShell、bash、zsh 均可使用）：
+
+```bash
+vidlens skill install --dest "$HOME/.codex/skills/vidlens"
+```
+
+Claude Code 示例：
+
+```bash
+vidlens skill install --dest "$HOME/.claude/skills/vidlens"
+```
+
+其他支持 `SKILL.md` 的 Agent，将 `--dest` 替换为对应的技能目录。命令返回已安装入口的绝对路径；相同内容重复安装返回 `unchanged`，已有不同内容时会报错。升级 CLI 后重新执行安装命令；确认替换旧入口时加 `--force`，同目录其他文件会保留。
+
+Agent 重新加载技能后，可以直接说“分析这个抖音/B站视频：链接”。Skill 会引导 Agent 调用 CLI，并结合字幕和画面回答。查看当前 CLI 附带的技能源文件：
+
+```bash
+vidlens skill info
+```
+
 首次本地语音识别需下载约 160 MB；解压后的 SenseVoice 模型缓存占用约 230 MB。之后会复用本机缓存。
 
 ### 开发安装
@@ -85,6 +111,8 @@ cd vidlens
 uv sync --group dev
 uv run vidlens doctor
 ```
+
+开发时用 `uv run vidlens skill install --dest "目标技能目录/vidlens"` 安装当前源码对应的技能。仓库根目录的 `SKILL.md` 是唯一维护入口，构建 wheel 时自动带入安装包。
 
 ## 输出内容
 
@@ -112,8 +140,34 @@ uv run vidlens doctor
 | `vidlens prepare URL --granularity coarse\|medium\|fine` | 生成多模态证据素材包 |
 | `vidlens cache list\|clean\|stats` | 查看、清理缓存和占用空间 |
 | `vidlens doctor` | 检查 ffmpeg、ASR 运行时和网络 |
+| `vidlens skill info` | 查看当前版本附带的 Skill |
+| `vidlens skill install --dest "目标技能目录/vidlens"` | 安装或更新 Agent 使用的 Skill |
+| `vidlens capabilities` | 核对实际调用的 CLI 版本、契约版本和能力 |
+| `vidlens export "素材包目录" --out "新目录"` | 导出包含媒体与相对引用的可搬运素材包 |
+| `vidlens verify "素材包目录"` | 核验文件引用、时间线与内容指纹 |
 
 常用通用参数：`--cookie`、`--cookie-file`、`--fresh`、`--out`。
+
+### 本地素材与长期保存
+
+视频或音频文件可直接作为输入。源文件保持只读，派生文件进入管理缓存；同名 SRT、VTT 或 JSON 字幕会自动读取，也可显式提供字幕：
+
+```bash
+vidlens prepare "本地视频.mp4" --subtitle-file "字幕.srt" --out "素材包目录"
+vidlens subs "本地音频.wav" --format txt
+vidlens export "素材包目录" --out "可搬运素材包目录"
+vidlens verify "可搬运素材包目录"
+```
+
+导出目录必须尚不存在。导出会复制原媒体与证据，并改写为相对引用；移动整个目录后可再次运行 `verify`，校验文件引用和 SHA-256 内容指纹。原素材包及源媒体保持不变。纯音频可使用 `meta`、`subs`、`transcribe` 和 `prepare`，其素材包帧集合为空；`frames` 需要视频画面。没有视频流或音轨时，清单中对应媒体引用为 null。
+
+### 版本与缓存一致性
+
+`vidlens capabilities` 返回版本、Agent 契约版本、素材包清单版本和可用能力。当前版本为 0.2.0，Agent 契约版本为 2；Skill 安装后应与实际调用的 CLI 核对能力，开发时优先使用 `uv run vidlens`。
+
+普通命令的参数错误也返回 JSON 和退出码 1；退出码 2 专用于需要登录。显式 `--help` 和 `--version` 使用常规 CLI 文本输出。所有失败均包含恢复提示，产物路径为绝对路径。
+
+媒体、WAV、转写按源内容校验；转写缓存同时核对引擎版本、识别模型、语言和术语修正表（包含执行顺序）。`--fresh` 会重新准备派生音频与识别结果。下载失败保留原有完整缓存，下载产物不会从其他媒体文件中猜选。指定 `--out` 时，已有素材包或同名字幕产物会被保护，应选择新目录；`--fresh` 刷新缓存，不授权覆盖事实层产物。
 
 ## 平台支持
 
@@ -141,7 +195,11 @@ CI 在 Windows/Linux 上运行 Python 3.11 与 3.14 检查；macOS Intel 与 App
 ```bash
 uv run ruff check src tests
 uv run pytest -q
+uv build --out-dir dist
+uv run python -X utf8 scripts/验证分发.py
 ```
+
+分发验证会创建临时独立环境，从 wheel 安装全部依赖，验证 Skill 安装和本地视频的素材包导出、搬迁与校验。CI 在 Windows 与 Linux 执行相同检查。
 
 真实平台链路需要显式启用 `VIDLENS_E2E=1`。本地 ASR 模型只在首次转写时下载。
 
